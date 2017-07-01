@@ -11,11 +11,7 @@ type ObjectLoader interface {
 	LoadObject(key string, bytes []byte)
 }
 
-// GetFlatObjects is a redis script that retrieves all objects in redis from a
-// collection of object keys. It needs to be called with the following argument
-// signature:
-// GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
-var GetFlatObjects = redis.NewScript(-1, `
+var getFlatObjectsScript = `
 local objs = {}
 
 for _, key in ipairs(KEYS) do
@@ -26,7 +22,13 @@ for _, key in ipairs(KEYS) do
 end
 
 return objs
-`)
+`
+
+// GetFlatObjects is a redis script that retrieves all objects in redis from a
+// collection of object keys. It needs to be called with the following argument
+// signature:
+// GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
+var GetFlatObjects = redis.NewScript(-1, getFlatObjectsScript)
 
 func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 	// The script requires the first argument to be the number of keys. We have to
