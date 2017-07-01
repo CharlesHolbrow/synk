@@ -9,8 +9,8 @@ type Object interface {
 	Init()
 	Copy() Object
 	Key() string
-	SubKey() string
-	PrevSubKey() string
+	GetSubKey() string
+	GetPrevSubKey() string
 }
 
 // Messages that are sent TO redis mutators methods
