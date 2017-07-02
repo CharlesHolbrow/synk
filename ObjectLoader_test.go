@@ -23,8 +23,8 @@ type TestObjLoader struct {
 var globalBytes, _ = json.Marshal(Dog{Age: 18, Name: "Buster", ID: "ab"})
 
 func (tol TestObjLoader) LoadObject(key string, bytes []byte) {
-	fmt.Printf("key: %s bytes: %s\n", key, bytes)
-	expectedKey := "c:dog:ab"
+	fmt.Printf("typeKey: %s bytes: %s\n", key, bytes)
+	expectedKey := "c:dog"
 	if key != expectedKey {
 		tol.t.Errorf("Got '%s' for key. Expected '%s'", key, expectedKey)
 	}

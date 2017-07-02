@@ -2,13 +2,14 @@ package synk
 
 import (
 	"log"
+	"strings"
 
 	"github.com/garyburd/redigo/redis"
 )
 
 // ObjectLoader is a type that can load objects from redis.
 type ObjectLoader interface {
-	LoadObject(key string, bytes []byte)
+	LoadObject(typeKey string, bytes []byte)
 }
 
 var getFlatObjectsScript = `
@@ -30,6 +31,8 @@ return objs
 // GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
 var GetFlatObjects = redis.NewScript(-1, getFlatObjectsScript)
 
+// RequestObjects calls the LoadObject(typeKey, bytes) method of the supplied
+// ObjectLoader for each object in objKeys
 func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 	// The script requires the first argument to be the number of keys. We have to
 	// make it one element longer than the points array.
@@ -68,7 +71,21 @@ func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 		if err != nil {
 			continue
 		}
-		l.LoadObject(rKey, rVal)
+
+		// Pass the typeKey in to the ObjectLoader. Note that we are not passing
+		// in the ID. It is the Loader's responsibility to reconstruct the ID
+		// from the serialized data. This may cause bugs iff the ID in the
+		// object is not consistent with the Object's key. If that happens, we
+		// have larger bugs to worry about.
+		index := strings.LastIndex(rKey, ":")
+		if index == -1 {
+			// Note that is there is no ':' character in the key, we just pass
+			// they raw key.
+			l.LoadObject(rKey, rVal)
+		} else {
+			// take all but that last part
+			l.LoadObject(rKey[:index], rVal)
+		}
 	}
 	return nil
 }
