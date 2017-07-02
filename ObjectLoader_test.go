@@ -29,8 +29,7 @@ func (tol TestObjLoader) LoadObject(key string, bytes []byte) {
 		tol.t.Errorf("Got '%s' for key. Expected '%s'", key, expectedKey)
 	}
 
-	fmt.Printf("Got:  %s\nWant: %s\n", bytes, globalBytes)
-
+	// Bad test  -- because we are comparing the exact same object
 	if !reflect.DeepEqual(bytes, globalBytes) {
 		tol.t.Errorf("Got:  %s\nWant: %s\n", bytes, globalBytes)
 	}
