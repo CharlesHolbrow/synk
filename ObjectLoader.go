@@ -1,6 +1,7 @@
 package synk
 
 import (
+	"errors"
 	"log"
 	"strings"
 
@@ -12,24 +13,21 @@ type ObjectLoader interface {
 	LoadObject(typeKey string, bytes []byte)
 }
 
-var getFlatObjectsScript = `
-local objs = {}
-
-for _, key in ipairs(KEYS) do
-	local ids = redis.call("SMEMBERS", key)
-	for _, id in ipairs(ids) do
-		objs[#objs+1] = {id, redis.call("GET", id)}
-	end
+// Get two parallel arrays. One with Keys, the other with Byte Slices
+var getKeysObjectsScript = `
+local ids = redis.call("SUNION", unpack(KEYS))
+if #ids == 0 then
+	return {}
 end
-
-return objs
+local objs = redis.call("MGET", unpack(ids))
+return {ids, objs}
 `
 
-// GetFlatObjects is a redis script that retrieves all objects in redis from a
+// GetKeysObjects is a redis script that retrieves all objects in redis from a
 // collection of object keys. It needs to be called with the following argument
 // signature:
 // GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
-var GetFlatObjects = redis.NewScript(-1, getFlatObjectsScript)
+var GetKeysObjects = redis.NewScript(-1, getKeysObjectsScript)
 
 // RequestObjects calls the LoadObject(typeKey, bytes) method of the supplied
 // ObjectLoader for each object in objKeys
@@ -43,34 +41,25 @@ func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 		args[i+1] = k
 	}
 
-	// Values will be []interface{}
-	luaObjects, err := redis.Values(GetFlatObjects.Do(conn, args...))
+	// redis.Values will return []interface{}
+	keysAndObjects, err := redis.Values(GetKeysObjects.Do(conn, args...))
 	if err != nil {
-		log.Println("Loader.RequestObjects - get values fail: " + err.Error())
+		log.Println("RequestObjects - get values fail: " + err.Error())
 		return err
 	}
+	if len(keysAndObjects) == 0 {
+		return nil
+	}
+	keys, keyOk := redis.Strings(keysAndObjects[0], nil)
+	vals, valOk := redis.ByteSlices(keysAndObjects[1], nil)
+	if keyOk != nil || valOk != nil || len(keys) != len(vals) {
+		txt := "RequestObjects got mismatched or invalid response from redis"
+		log.Println(txt)
+		return errors.New(txt)
+	}
 
-	// luaObjects is an []interface{}. We want to step through each interface{}
-	// and extract its key and bytes
-	for _, intrfce := range luaObjects {
-		// Convert each interface{} to its actual value - []interface{} - Note that
-		// the object returned in the lua script is a table of tables. Each inner
-		// table is a lua array with two elements - the key, and the serialized
-		// payload. Note that tables returned by lua must be indexed with
-		// consecutive integers (as per the redis lua EVAL specification). A value
-		// returned by lua may not be indexed with strings.
-		slice, err := redis.Values(intrfce, nil)
-		if err != nil || len(slice) < 2 {
-			continue
-		}
-		rKey, err := redis.String(slice[0], nil) // redis key
-		if err != nil {
-			continue
-		}
-		rVal, err := redis.Bytes(slice[1], nil)
-		if err != nil {
-			continue
-		}
+	for i, rKey := range keys {
+		rVal := vals[i]
 
 		// Pass the typeKey in to the ObjectLoader. Note that we are not passing
 		// in the ID. It is the Loader's responsibility to reconstruct the ID
