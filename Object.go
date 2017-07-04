@@ -37,6 +37,9 @@ type ModObj struct {
 
 // MsgModObj represents relative changes made to an object. It is sent to the
 // client when an object is created for the first time.
+//
+// This is the message that the client receives when the object is moving from
+// one chunk to another.
 type MsgModObj struct {
 	Method msgModObj   `json:"method"`
 	Diff   interface{} `json:"diff"`
@@ -71,4 +74,19 @@ type msgAddObj struct{}
 
 func (m msgAddObj) MarshalJSON() ([]byte, error) {
 	return []byte("\"addObj\""), nil
+}
+
+// MsgRemObj tells clients to remove and teardown an object. This is NOT the
+// message that a client gets when an object is moving from one chunk to
+// another, even if the client is not subscribed to the destination.
+type MsgRemObj struct {
+	Method msgRemObj `json:"method"`
+	SKey   string    `json:"sKey"`
+	Key    string    `json:"key"`
+}
+
+type msgRemObj struct{}
+
+func (m msgRemObj) MarshalJSON() ([]byte, error) {
+	return []byte("\"remObj\""), nil
 }

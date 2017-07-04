@@ -17,6 +17,8 @@ func HandleMessage(msg interface{}, rConn redis.Conn) error {
 		return redisNewObject(msg, rConn)
 	case ModObj:
 		return redisModObject(msg, rConn)
+	case DelObj:
+		return redisDelObj(msg, rConn)
 	default:
 		txt := fmt.Sprintf("Unknown Message Type: %T", msg)
 		return errors.New(txt)
@@ -125,6 +127,31 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 	rConn.Send("SET", key, objJSON)
 	rConn.Send("PUBLISH", psk, msgJSON)
 	rConn.Send("PUBLISH", nsk, addJSON)
+	_, err = rConn.Do("EXEC")
+
+	return err
+}
+
+func redisDelObj(msg DelObj, rConn redis.Conn) error {
+
+	// Note that we are using the Previous subscription key. If we are deleting
+	// an object that was moving to another subscription, but the move was not yet
+	// resolved, the clients will still think the character is in the old subKey.
+	remMsg := MsgRemObj{
+		SKey: msg.GetPrevSubKey(),
+		Key:  msg.Key(),
+	}
+
+	remJSON, err := json.Marshal(remMsg)
+	if err != nil {
+		txt := "synk.redisDelObj failed to convert msg to json: " + err.Error()
+		return errors.New(txt)
+	}
+
+	rConn.Send("MULTI")
+	rConn.Send("SREM", remMsg.SKey, msg.Key)
+	rConn.Send("DEL", remMsg.Key)
+	rConn.Send("PUBLISH", remMsg.SKey, remJSON)
 	_, err = rConn.Do("EXEC")
 
 	return err

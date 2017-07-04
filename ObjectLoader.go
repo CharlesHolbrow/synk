@@ -68,7 +68,7 @@ func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 		// have larger bugs to worry about.
 		index := strings.LastIndex(rKey, ":")
 		if index == -1 {
-			// Note that is there is no ':' character in the key, we just pass
+			// Note that if there is no ':' character in the key, we just pass
 			// they raw key.
 			l.LoadObject(rKey, rVal)
 		} else {
