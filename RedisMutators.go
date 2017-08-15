@@ -149,7 +149,7 @@ func redisDelObj(msg DelObj, rConn redis.Conn) error {
 	}
 
 	rConn.Send("MULTI")
-	rConn.Send("SREM", remMsg.SKey, msg.Key)
+	rConn.Send("SREM", remMsg.SKey, msg.Key())
 	rConn.Send("DEL", remMsg.Key)
 	rConn.Send("PUBLISH", remMsg.SKey, remJSON)
 	_, err = rConn.Do("EXEC")
