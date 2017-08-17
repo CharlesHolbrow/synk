@@ -29,9 +29,11 @@ return {ids, objs}
 // GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
 var GetKeysObjects = redis.NewScript(-1, getKeysObjectsScript)
 
-// RequestObjects calls the LoadObject(typeKey, bytes) method of the supplied
-// ObjectLoader for each object in objKeys
-func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
+// RequestObjects from redis. Results are returned as two parallel slices. If
+// there are no results, the slices will be of length zero.
+//
+// The two slices are gauranteed to be of equal length.
+func RequestObjects(conn redis.Conn, objKeys []string) ([]string, [][]byte, error) {
 	// The script requires the first argument to be the number of keys. We have to
 	// make it one element longer than the points array.
 	size := len(objKeys)
@@ -45,17 +47,30 @@ func RequestObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 	keysAndObjects, err := redis.Values(GetKeysObjects.Do(conn, args...))
 	if err != nil {
 		log.Println("RequestObjects - get values fail: " + err.Error())
-		return err
+		return nil, nil, err
 	}
+
 	if len(keysAndObjects) == 0 {
-		return nil
+		return make([]string, 0), make([][]byte, 0), nil
 	}
+
 	keys, keyOk := redis.Strings(keysAndObjects[0], nil)
 	vals, valOk := redis.ByteSlices(keysAndObjects[1], nil)
 	if keyOk != nil || valOk != nil || len(keys) != len(vals) {
 		txt := "RequestObjects got mismatched or invalid response from redis"
 		log.Println(txt)
-		return errors.New(txt)
+		return nil, nil, errors.New(txt)
+	}
+
+	return keys, vals, nil
+}
+
+// LoadObjects calls the LoadObject(typeKey, bytes) method of the supplied
+// ObjectLoader for each object in objKeys
+func LoadObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
+	keys, vals, err := RequestObjects(conn, objKeys)
+	if err != nil {
+		return err
 	}
 
 	for i, rKey := range keys {

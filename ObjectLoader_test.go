@@ -38,9 +38,9 @@ func (tol TestObjLoader) LoadObject(key string, bytes []byte) {
 func TestRequestObjects(t *testing.T) {
 
 	conn := redigomock.NewConn()
-	conn.Script([]byte(getFlatObjectsScript), 1, "objs:000a:0|0").ExpectSlice([]interface{}{"c:dog:ab", globalBytes})
+	conn.Script([]byte(getKeysObjectsScript), 1, "objs:000a:0|0").ExpectSlice([]interface{}{"c:dog:ab", globalBytes})
 
 	tol := TestObjLoader{t}
 
-	RequestObjects(tol, conn, []string{"objs:000a:0|0"})
+	LoadObjects(tol, conn, []string{"objs:000a:0|0"})
 }
