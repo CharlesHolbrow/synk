@@ -70,7 +70,7 @@ func RequestByteSlices(conn redis.Conn, subKeys []string) ([]string, [][]byte, e
 // subscrition keys.
 //
 // The caller must provide a function for converting typeKey+bytes to objects.
-func RequestObjects(conn redis.Conn, subKeys []string, buildObj BuildObject) ([]Object, error) {
+func RequestObjects(conn redis.Conn, subKeys []string, buildObj ObjectConstructor) ([]Object, error) {
 	keys, vals, err := RequestByteSlices(conn, subKeys)
 	if err != nil {
 		return nil, err

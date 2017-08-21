@@ -35,9 +35,9 @@ const (
 type Client struct {
 	custom           CustomClient
 	RedisPool        *redis.Pool
-	builder          BuildObject
+	builder          ObjectConstructor // How objects from redis will be created
 	wsConn           *websocket.Conn
-	rConn            redis.Conn // This is the connection used by PubSubCon
+	rConn            redis.Conn // This is the connection used by rSubscription
 	rSubscription    redis.PubSubConn
 	messageChannel   chan interface{}
 	writeToWebSocket chan []byte
@@ -48,19 +48,19 @@ type Client struct {
 	waitGroup        sync.WaitGroup
 }
 
-func newClient(redisAddr string, wsConn *websocket.Conn, build BuildObject, pool *redis.Pool) (*Client, error) {
+func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectConstructor) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 
 	// get a redis connection
-	rConn, err := redis.Dial("tcp", redisAddr)
+	rConn, err := redis.Dial("tcp", synkConn.addr)
 	if err != nil {
 		log.Println("error connecting to redis:", err)
 		return client, err
 	}
 
 	client = &Client{
-		RedisPool:        pool,
+		RedisPool:        &synkConn.Pool,
 		builder:          build,
 		wsConn:           wsConn,
 		rConn:            rConn,

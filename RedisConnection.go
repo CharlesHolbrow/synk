@@ -10,12 +10,14 @@ import (
 
 // RedisConnection wraps a redigo connection Pool
 type RedisConnection struct {
+	addr string
 	Pool redis.Pool
 }
 
 // NewConnection builds a new AetherRedisConnection
 func NewConnection(redisAddr string) *RedisConnection {
 	arc := &RedisConnection{
+		addr: redisAddr,
 		Pool: redis.Pool{
 			MaxIdle:     100,
 			IdleTimeout: 240 * time.Second,
