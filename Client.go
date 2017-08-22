@@ -261,9 +261,13 @@ func (client *Client) handleMessage(message interface{}) error {
 		log.Printf("Received UpdateSubscriptionMethod map(%s) add(%d) remove(%d)\n",
 			msg.MapID, len(msg.Add), len(msg.Remove))
 		client.updateSubscription(msg)
-	default:
-		txt := fmt.Sprintf("Client.handleMessages does not handle %T", message)
-		return errors.New(txt)
+	case CustomMessage:
+		if client.custom != nil {
+			client.custom.OnMessage(client, msg.Method, msg.Data)
+		} else {
+			txt := fmt.Sprintf("Client.handleMessages does not handle %T", message)
+			return errors.New(txt)
+		}
 	}
 	return nil
 }
