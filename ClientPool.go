@@ -27,13 +27,13 @@ func (pool *ClientPool) run() {
 			pool.all[client.ID] = client
 		case client := <-pool.remove:
 			if _, ok := pool.all[client.ID]; ok {
-				close(client.writeToWebSocket)
+				close(client.toWebSocket)
 				delete(pool.all, client.ID)
 			}
 		case message := <-pool.broadcast:
 			for _, client := range pool.all {
 				select {
-				case client.writeToWebSocket <- message:
+				case client.toWebSocket <- message:
 				default:
 					// buffer overrun
 				}

@@ -33,19 +33,19 @@ const (
 // websocket and redis connections.
 // The client does not know which pools it is a part of.
 type Client struct {
-	custom           CustomClient
-	RedisPool        *redis.Pool
-	builder          ObjectConstructor // How objects from redis will be created
-	wsConn           *websocket.Conn
-	rConn            redis.Conn // This is the connection used by rSubscription
-	rSubscription    redis.PubSubConn
-	messageChannel   chan interface{}
-	writeToWebSocket chan []byte
-	ID               ID
-	quit             chan bool
-	subscriptions    map[string]bool
-	closeOnce        sync.Once
-	waitGroup        sync.WaitGroup
+	custom        CustomClient
+	RedisPool     *redis.Pool
+	builder       ObjectConstructor // How objects from redis will be created
+	wsConn        *websocket.Conn
+	rConn         redis.Conn       // This is the connection used by rSubscription
+	rSubscription redis.PubSubConn // This uses rConn as the underlying conn
+	fromWebSocket chan interface{}
+	toWebSocket   chan []byte // safe so send messages here concurrently
+	ID            ID
+	quit          chan bool
+	subscriptions map[string]bool
+	closeOnce     sync.Once
+	waitGroup     sync.WaitGroup
 }
 
 func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectConstructor) (*Client, error) {
@@ -60,14 +60,14 @@ func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectCo
 	}
 
 	client = &Client{
-		RedisPool:        &synkConn.Pool,
-		builder:          build,
-		wsConn:           wsConn,
-		rConn:            rConn,
-		rSubscription:    redis.PubSubConn{Conn: rConn},
-		messageChannel:   make(chan interface{}, clientBufferLength),
-		writeToWebSocket: make(chan []byte, clientBufferLength),
-		ID:               NewID(),
+		RedisPool:     &synkConn.Pool,
+		builder:       build,
+		wsConn:        wsConn,
+		rConn:         rConn,
+		rSubscription: redis.PubSubConn{Conn: rConn},
+		fromWebSocket: make(chan interface{}, clientBufferLength),
+		toWebSocket:   make(chan []byte, clientBufferLength),
+		ID:            NewID(),
 		// quit is buffered, because it should never block. Be careful when
 		// quiting from outside the Client methods. We want to be sure to remove
 		// all references to the client when it terminates so we can be
@@ -102,7 +102,7 @@ func (client *Client) startReadingFromRedis() {
 		case redis.Message:
 			client.handleByteSliceFromRedis(v.Data)
 		case redis.PMessage:
-			client.writeToWebSocket <- v.Data // v.Channel, v.Pattern, v.Data
+			client.toWebSocket <- v.Data // v.Channel, v.Pattern, v.Data
 		case redis.Subscription:
 			// Redis is confirming our subscription v.Channel, v.Kind, v.Count
 		case error:
@@ -124,7 +124,7 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 	s := string(bytes)
 	split := strings.Index(s, "{")
 	if split == 0 {
-		client.writeToWebSocket <- bytes
+		client.toWebSocket <- bytes
 		return
 	}
 
@@ -141,11 +141,11 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 		fromWhere := header[5:]
 		if _, ok := client.subscriptions[fromWhere]; !ok {
 			// We are not subscribed to the chunk this object is entering from.
-			client.writeToWebSocket <- bytes
+			client.toWebSocket <- bytes
 		}
 	default:
 		log.Println("handleByteSliceFromRedis: unrecognized header", header)
-		client.writeToWebSocket <- bytes
+		client.toWebSocket <- bytes
 	}
 }
 
@@ -159,9 +159,9 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 // Monitor client.messageChannel - These are parsed messages from the client.
 //
 // Inputs:
-// 		- client.writeToWebSocket chan
+// 		- client.toWebSocket chan
+//		- client.fromWebSocket chan
 //		- client.quit chan
-//		- client.messageChannel chan
 // Output:
 //		- client.wsConn,
 // 		- client.rConn/.rSubscription
@@ -179,18 +179,16 @@ func (client *Client) startMainLoop() {
 
 	for {
 		select {
-		case message, ok := <-client.writeToWebSocket:
-			// We received a message that is intended for the client. Note that if we
-			// return (or break out of the for loop), the message will not be in our
-			// buffer AND will never have reached the client
-			client.wsConn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		case message, ok := <-client.toWebSocket:
 			if !ok {
 				// the client.writeToWebSocket channel was closed up-stream
 				log.Println("Client.writeToWebSocket: go channel was closed")
 				return
 			}
-			if err := client.wsConn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Println("Client: Error Writing to websocket:", err)
+			// We received a message that is intended for the client. Note that if we
+			// return (or break out of the for loop), the message will not be in our
+			// buffer AND will never have reached the client
+			if err := client.writeToWebSocket(message); err != nil {
 				return
 			}
 		case <-ticker.C:
@@ -200,7 +198,7 @@ func (client *Client) startMainLoop() {
 			}
 		// Above this should be logic for writing to the websocket
 		// Below should be other stuff
-		case message := <-client.messageChannel:
+		case message := <-client.fromWebSocket:
 			// Please note the genius of handling subscription methods here.
 			// This allows us to start subscribing before we send the requested
 			// chunks. However setTile methods that arrive after we send the
@@ -247,7 +245,7 @@ func (client *Client) startReadingFromWebSocket() {
 			// Failed to parse message. Report error, but don't break out of the loop.
 			log.Println("Client.startReadingFromWebSocket: error parsing bytes:", parseErr)
 		} else {
-			client.messageChannel <- message
+			client.fromWebSocket <- message
 		}
 	}
 }
@@ -318,38 +316,27 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		}
 
 		// We are inside the startMainLoop() function in the call stack, so we
-		// must be absolutely sure that we do not block. If we send the fragment
-		// from the current goroutine, we might block, because we might overload
-		// the writeToWebSocket channel buffer.
+		// must be absolutely sure that we do not block. If we send fragment to
+		// the toWebSocket channel, we might block, because we might overload
+		// the toWebSocket channel buffer.
 		//
-		// Launch a new goroutine, for the purposes of sending the fragment.
-		//
-		// BUG(charles): If an object is changed, and the diff is sent before
-		// the loop below finishes, the client will receive the diff before
-		// receiving the object. The best solution is probably send all the
-		// changes in a single message that is gauranteed not to block the
-		// client.writeToWebSocket channel. This would have to check that
-		// writing to the channel will not block.
-		// Alternatively we could just send the data to the client directly from
-		// this goroutine, which might be ideal.
+		// We have already updated our subscription, so immediately send the
+		// current state to the web socket.
 		log.Printf("Sending %d Objects\n", len(objs))
 		if len(objs) > 0 {
-			go func() {
-				for _, obj := range objs {
-					bytes, err := json.Marshal(MsgAddObj{
-						State: obj.State(),
-						Key:   obj.Key(),
-						SKey:  obj.GetSubKey(),
-					})
-					if err != nil {
-						log.Printf("Client.updateSubscription failed to marshal %v\n", obj)
-					}
-					client.writeToWebSocket <- bytes
+			for _, obj := range objs {
+				bytes, err := json.Marshal(MsgAddObj{
+					State: obj.State(),
+					Key:   obj.Key(),
+					SKey:  obj.GetSubKey(),
+				})
+				if err != nil {
+					log.Printf("Client.updateSubscription failed to marshal %v\n", obj)
 				}
-			}()
+				client.writeToWebSocket(bytes)
+			}
 		}
 	}
-
 	return nil
 }
 
@@ -365,7 +352,21 @@ func (client *Client) Close() {
 	client.quit <- true
 }
 
+// May only be called from the mainLoop. Not safe for concurrent calls.
+func (client *Client) writeToWebSocket(message []byte) error {
+	client.wsConn.SetWriteDeadline(time.Now().Add(writeTimeout))
+	if err := client.wsConn.WriteMessage(websocket.TextMessage, message); err != nil {
+		log.Println("Client: Error Writing to websocket:", err)
+		return err
+	}
+	return nil
+}
+
 // WriteToWebSocket sends data via websocket. Safe for concurrent calls.
+//
+// While this is the same as just sending data to the toWebSocket channel, this
+// method is exported while the channel is not. This way it is harder for client
+// code to accidentally overwrite the channel.
 func (client *Client) WriteToWebSocket(data []byte) {
-	client.writeToWebSocket <- data
+	client.toWebSocket <- data
 }
