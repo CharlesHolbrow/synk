@@ -340,6 +340,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 				client.writeToWebSocket(bytes)
 			}
 		}
+		client.custom.OnSubscribe(client, msg.Add, objs)
 	}
 	return nil
 }
