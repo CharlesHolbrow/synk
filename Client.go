@@ -258,8 +258,6 @@ func (client *Client) String() string {
 func (client *Client) handleMessage(message interface{}) error {
 	switch msg := message.(type) {
 	case UpdateSubscriptionMessage:
-		log.Printf("Received UpdateSubscriptionMethod map(%s) add(%d) remove(%d)\n",
-			msg.MapID, len(msg.Add), len(msg.Remove))
 		client.updateSubscription(msg)
 	case CustomMessage:
 		if client.custom != nil {
@@ -315,7 +313,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		rConn.Close()
 
 		if err != nil {
-			log.Printf("Client.updateSubscription: error geting Fragment: %s\n", err)
+			log.Printf("Client.updateSubscription: error geting Objects: %s\n", err)
 			return err
 		}
 
@@ -326,7 +324,6 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		//
 		// We have already updated our subscription, so immediately send the
 		// current state to the web socket.
-		log.Printf("Sending %d Objects\n", len(objs))
 		if len(objs) > 0 {
 			for _, obj := range objs {
 				bytes, err := json.Marshal(MsgAddObj{
