@@ -2,6 +2,7 @@ package synk
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -12,22 +13,6 @@ import (
 type ObjectLoader interface {
 	LoadObject(typeKey string, bytes []byte)
 }
-
-// Get two parallel arrays. One with Keys, the other with Byte Slices
-var getKeysObjectsScript = `
-local ids = redis.call("SUNION", unpack(KEYS))
-if #ids == 0 then
-	return {}
-end
-local objs = redis.call("MGET", unpack(ids))
-return {ids, objs}
-`
-
-// GetKeysObjects is a redis script that retrieves all objects in redis from a
-// collection of object keys. It needs to be called with the following argument
-// signature:
-// GetFlatObjects.Do(c redis.Conn, kCount int, k1, k2...)
-var GetKeysObjects = redis.NewScript(-1, getKeysObjectsScript)
 
 // RequestByteSlices from redis. Given a slice of subscription keys, get byte
 // slices for all keys. Results are returned as two parallel slices. If there
@@ -47,7 +32,7 @@ func RequestByteSlices(conn redis.Conn, subKeys []string) ([]string, [][]byte, e
 	// redis.Values will return []interface{}
 	keysAndObjects, err := redis.Values(GetKeysObjects.Do(conn, args...))
 	if err != nil {
-		log.Println("RequestObjects - get values fail: " + err.Error())
+		log.Println("RequestByteSlices - get values fail: " + err.Error())
 		return nil, nil, err
 	}
 
@@ -58,7 +43,10 @@ func RequestByteSlices(conn redis.Conn, subKeys []string) ([]string, [][]byte, e
 	keys, keyOk := redis.Strings(keysAndObjects[0], nil)
 	vals, valOk := redis.ByteSlices(keysAndObjects[1], nil)
 	if keyOk != nil || valOk != nil || len(keys) != len(vals) {
-		txt := "RequestObjects got mismatched or invalid response from redis"
+		txt := "RequestByteSlices got mismatched or invalid response from redis\n"
+		txt = txt + fmt.Sprintf("RequestByteSlices keys: %s\n", keys)
+		txt = txt + fmt.Sprintf("RequestByteSlices vals: %s\n", vals)
+		txt = txt + fmt.Sprintf("RequestByteSlices len(keys): %v\n", len(keys))
 		log.Println(txt)
 		return nil, nil, errors.New(txt)
 	}
@@ -106,6 +94,7 @@ func RequestObjects(conn redis.Conn, subKeys []string, buildObj ObjectConstructo
 // ObjectLoader for each object in objKeys
 func LoadObjects(l ObjectLoader, conn redis.Conn, objKeys []string) error {
 	keys, vals, err := RequestByteSlices(conn, objKeys)
+
 	if err != nil {
 		return err
 	}

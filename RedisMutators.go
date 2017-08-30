@@ -45,15 +45,13 @@ func redisNewObject(m NewObj, rConn redis.Conn) error {
 		return errors.New("redisNewObject failed to convert object to json")
 	}
 
-	// Note that there is a danger here - if there is already an object with the
-	// given key, it will be overwritten. This is less likely to be a problem if
-	// we are creating our objects correctly - i.e. we should get all our IDs from
-	// redis with the the getID method.
-	rConn.Send("MULTI")
-	rConn.Send("SADD", subKey, objKey)
-	rConn.Send("SET", objKey, redisJSON)
-	rConn.Send("PUBLISH", subKey, msgJSON)
-	_, err = rConn.Do("EXEC")
+	// The script ensures that we do not accidentally overwrite a redis KEY
+	val, err := redis.String(setAndPublishScript.Do(rConn, objKey, subKey, redisJSON, msgJSON))
+
+	if val == "NO" {
+		txt := "synk.redisNewObject failed to create object. Redis key '%s' already exists"
+		return fmt.Errorf(txt, objKey)
+	}
 
 	return err
 }

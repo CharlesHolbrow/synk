@@ -19,7 +19,7 @@ type CustomMessage struct {
 }
 
 // UpdateSubscriptionMessage is a request (probably from a client) to change
-// the client's map subscription by listing chunks to add and/or remove
+// the client's subscription by listing subscription keys to add and/or remove
 type UpdateSubscriptionMessage struct {
 	Method string   `json:"method"`
 	MapID  string   `json:"mapID"`
