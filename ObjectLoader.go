@@ -84,6 +84,7 @@ func RequestObjects(conn redis.Conn, subKeys []string, buildObj ObjectConstructo
 			results[j] = obj
 			j++
 		} else {
+			//BUG(charles): error is handled twice
 			log.Printf("Failed RequestObjects failed to create object: %s\n", err)
 		}
 	}

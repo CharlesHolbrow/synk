@@ -3,9 +3,8 @@ package synk
 import (
 	"encoding/json"
 	"fmt"
-	"testing"
-
 	"reflect"
+	"testing"
 
 	"github.com/rafaeljusto/redigomock"
 )
@@ -29,7 +28,7 @@ func (tol TestObjLoader) LoadObject(key string, bytes []byte) {
 		tol.t.Errorf("Got '%s' for key. Expected '%s'", key, expectedKey)
 	}
 
-	// Bad test  -- because we are comparing the exact same object
+	// Bad test -- because we are comparing the exact same object
 	if !reflect.DeepEqual(bytes, globalBytes) {
 		tol.t.Errorf("Got:  %s\nWant: %s\n", bytes, globalBytes)
 	}
@@ -38,7 +37,7 @@ func (tol TestObjLoader) LoadObject(key string, bytes []byte) {
 func TestRequestObjects(t *testing.T) {
 
 	conn := redigomock.NewConn()
-	conn.Script([]byte(getKeysObjectsScript), 1, "objs:000a:0|0").ExpectSlice([]interface{}{"c:dog:ab", globalBytes})
+	conn.Script([]byte(getKeysObjectsScript), 1, "objs:000a:0|0").ExpectSlice("c:dog:ab", []interface{}{globalBytes})
 
 	tol := TestObjLoader{t}
 

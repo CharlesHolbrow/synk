@@ -2,7 +2,6 @@ package synk
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -263,8 +262,7 @@ func (client *Client) handleMessage(message interface{}) error {
 		if client.custom != nil {
 			client.custom.OnMessage(client, msg.Method, msg.Data)
 		} else {
-			txt := fmt.Sprintf("Client.handleMessages does not handle %T", message)
-			return errors.New(txt)
+			return fmt.Errorf("Client.handleMessages does not handle %T", message)
 		}
 	}
 	return nil
