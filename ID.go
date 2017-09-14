@@ -1,6 +1,9 @@
 package synk
 
-import "math/rand"
+import (
+	"math/rand"
+	"time"
+)
 
 // Untyped string constant. It's a string, but it's not a Go
 // value of type string. Ids are used in the pixel aether to
@@ -9,16 +12,25 @@ import "math/rand"
 // differentiate.
 const idChars = "23456789ABCDEFGHJKLMNPQRSTWXYZabcdefghijkmnopqrstuvwxyz"
 
+// These 62 characters include all numbers and letters
+const idChars2 = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+// How long are our IDs
 const idLen = 16
 
-// ID Identification data type used by aether
+// Get properly randomized values
+func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
+}
+
+// The ID Type used be clients and Objects
 type ID [idLen]byte
 
 // NewID Creates n id randomly from the distinct characters
 func NewID() ID {
 	var id ID
 	for i := range id {
-		id[i] = idChars[rand.Intn(len(idChars))]
+		id[i] = idChars2[rand.Intn(len(idChars2))]
 	}
 	return id
 }
