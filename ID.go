@@ -27,13 +27,14 @@ func init() {
 // The ID Type used by clients and Objects
 type ID [idLen]byte
 
-// NewID Creates a new random ID.
+// NewID Creates a new random ID. Randomly generated IDs always end with an
+// exclaimation '!' this helps keeps them distinct from explicitly set IDs.
 func NewID() ID {
 	var id ID
 	for i := range id {
 		id[i] = idChars2[rand.Intn(len(idChars2))]
 	}
-	id[0] = '!'
+	id[idLen-1] = '!'
 	return id
 }
 
