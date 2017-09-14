@@ -18,20 +18,22 @@ const idChars2 = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
 // How long are our IDs
 const idLen = 16
 
-// Get properly randomized values
+// Get properly randomized values. Note that the default source is safe for
+// concurrent calls, but sources created by NewSource are not.
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
-// The ID Type used be clients and Objects
+// The ID Type used by clients and Objects
 type ID [idLen]byte
 
-// NewID Creates n id randomly from the distinct characters
+// NewID Creates a new random ID.
 func NewID() ID {
 	var id ID
 	for i := range id {
 		id[i] = idChars2[rand.Intn(len(idChars2))]
 	}
+	id[0] = '!'
 	return id
 }
 
