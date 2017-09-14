@@ -9,8 +9,11 @@ type Object interface {
 	Init()
 	Copy() Object
 	Key() string
+	TypeKey() string
 	GetSubKey() string
 	GetPrevSubKey() string
+	GetID() string
+	SetID(string) string
 }
 
 // Messages that are sent TO redis mutators methods

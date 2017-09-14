@@ -1,6 +1,7 @@
 package synk
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -42,6 +43,22 @@ func (arc *RedisConnection) GetID(counterKey string) (string, error) {
 	return getID(counterKey, conn)
 }
 
+// NewObjectID gets an ID from redis, and sets that on the new object.
+// We may eventully want to replace this with randomly generated IDs
+func (arc *RedisConnection) NewObjectID(o Object) error {
+	conn := arc.Pool.Get()
+	defer conn.Close()
+	if o.GetID() == "" {
+		if id, err := getID(o.TypeKey(), conn); err == nil {
+			o.SetID(id)
+		} else {
+			return fmt.Errorf("arc.NewObjectID failed to get ID: %s", err)
+		}
+	}
+	return nil
+}
+
+// GetID is a helper for retrieving unique ID for objects. The Typical use
 func getID(counterKey string, conn redis.Conn) (string, error) {
 	r, err := redis.Int(conn.Do("INCR", "count:"+counterKey))
 	if err != nil {
