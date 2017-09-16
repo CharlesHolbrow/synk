@@ -2,7 +2,6 @@ package synk
 
 import (
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -10,8 +9,10 @@ import (
 
 // RedisConnection wraps a redigo connection Pool
 type RedisConnection struct {
-	addr string
-	Pool redis.Pool
+	addr       string
+	Pool       redis.Pool
+	objMsgConn redis.Conn  // will be passed to our mutator functions
+	ToRedis    chan Object // Should be one of NewObj, DelObj, or ModObj
 }
 
 // NewConnection builds a new AetherRedisConnection
@@ -30,15 +31,50 @@ func NewConnection(redisAddr string) *RedisConnection {
 			},
 		},
 	}
+	arc.objMsgConn = arc.Pool.Get()
+	arc.ToRedis = make(chan Object, 128)
+
+	go func() {
+		for msg := range arc.ToRedis {
+			err := HandleMessage(msg, arc.objMsgConn)
+			if err != nil {
+				log.Printf("NewConnection: Error sending message to redis:\n"+
+					"\tError: %s\n"+
+					"\tMessage: %s\n", err, msg)
+			}
+		}
+	}()
+
 	return arc
 }
 
-// GetID is a helper for retrieving unique ID for objects.
-// This is DEPRECATED in favor of RandomIDs.
-func getID(counterKey string, conn redis.Conn) (string, error) {
-	r, err := redis.Int(conn.Do("INCR", "count:"+counterKey))
-	if err != nil {
-		return "", err
+// Create an object in redis. Safe for concurrent calls. Note that this mutates
+// the object:
+// - If the object has no ID, add a random ID
+// - call the objects Resolve() method, which clears the objects's diff
+func (synkConn *RedisConnection) Create(obj Object) {
+	// add ID,
+	// copy object
+	// create AddObj
+	if obj.GetID() == "" {
+		obj.SetID(NewID().String())
 	}
-	return strconv.FormatInt(int64(r), 36), nil
+
+	// While we were creating this object struct, we may have used setters to
+	// set initial values. Resolve them here so the newly created object is
+	// up-to-date.
+	obj.Resolve()
+
+	// Remember, we can't write to a redigo connection concurrently. We must
+	// either copy the object, and send it to a channel dedicated to a single
+	// connection, OR we must get a channel from the pool that will be dedicated
+	// to a given goroutine. This Method is intended to be called concurrently,
+	// so here we must copy the object
+	objCopy := obj.Copy()
+
+	// The main purpose of init is to ensure that all the fields will be sent
+	// to clients.
+	objCopy.Init()
+
+	synkConn.ToRedis <- NewObj{objCopy}
 }

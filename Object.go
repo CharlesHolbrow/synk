@@ -38,15 +38,14 @@ type ModObj struct {
 // - Have an sKey string field that indicates a subscription field
 // - potentially have a new SKey 'nsKey'
 
-// MsgModObj represents relative changes made to an object. It is sent to the
-// client when an object is created for the first time.
+// modObjMessage represents relative changes made to an object.
 //
-// This is the message that the client receives when the object is moving from
-// one chunk to another.
-type MsgModObj struct {
-	Method msgModObj   `json:"method"`
-	Diff   interface{} `json:"diff"`
-	Key    string      `json:"key"`
+// This is also the message that the client receives when the object is moving
+// from one chunk to another.
+type modObjMessage struct {
+	Method modObjMethod `json:"method"`
+	Diff   interface{}  `json:"diff"`
+	Key    string       `json:"key"`
 	// SKey is the subscription key where the object is prior to movement.
 	SKey string `json:"sKey"`
 	// NSKey is the subscription key that the object is moving to. Only present if
@@ -54,42 +53,42 @@ type MsgModObj struct {
 	NSKey string `json:"nsKey,omitempty"`
 }
 
-type msgModObj struct{}
+type modObjMethod struct{}
 
-func (m msgModObj) MarshalJSON() ([]byte, error) {
+func (m modObjMethod) MarshalJSON() ([]byte, error) {
 	return []byte("\"modObj\""), nil
 }
 
-// MsgAddObj is sent to the client to tell that client to create a new object.
+// addObjMsg is sent to the client to tell that client to create a new object.
 // This would happen when an object moves into the client's subscription, OR
 // when an object is newly created.
-type MsgAddObj struct {
-	Method msgAddObj   `json:"method"`
-	State  interface{} `json:"state"`
-	Key    string      `json:"key"`
+type addObjMsg struct {
+	Method addObjMethod `json:"method"`
+	State  interface{}  `json:"state"`
+	Key    string       `json:"key"`
 	// SKey is where we add this object to
 	SKey string `json:"sKey"`
 	// If the object is moving from another chunk, include psKey
 	PSKey string `json:"psKey,omitempty"`
 }
 
-type msgAddObj struct{}
+type addObjMethod struct{}
 
-func (m msgAddObj) MarshalJSON() ([]byte, error) {
+func (m addObjMethod) MarshalJSON() ([]byte, error) {
 	return []byte("\"addObj\""), nil
 }
 
-// MsgRemObj tells clients to remove and teardown an object. This is NOT the
+// remObjMsg tells clients to remove and teardown an object. This is NOT the
 // message that a client gets when an object is moving from one chunk to
 // another, even if the client is not subscribed to the destination.
-type MsgRemObj struct {
-	Method msgRemObj `json:"method"`
-	SKey   string    `json:"sKey"`
-	Key    string    `json:"key"`
+type remObjMsg struct {
+	Method remObjMethod `json:"method"`
+	SKey   string       `json:"sKey"`
+	Key    string       `json:"key"`
 }
 
-type msgRemObj struct{}
+type remObjMethod struct{}
 
-func (m msgRemObj) MarshalJSON() ([]byte, error) {
+func (m remObjMethod) MarshalJSON() ([]byte, error) {
 	return []byte("\"remObj\""), nil
 }

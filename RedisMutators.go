@@ -13,10 +13,10 @@ import (
 // update clients subscribed to the db.
 func HandleMessage(msg interface{}, rConn redis.Conn) error {
 	switch msg := msg.(type) {
-	case NewObj:
-		return redisNewObject(msg, rConn)
 	case ModObj:
 		return redisModObject(msg, rConn)
+	case NewObj:
+		return redisNewObject(msg, rConn)
 	case DelObj:
 		return redisDelObj(msg, rConn)
 	default:
@@ -29,7 +29,7 @@ func redisNewObject(m NewObj, rConn redis.Conn) error {
 	m.Resolve()
 	subKey := m.GetSubKey()
 	objKey := m.Key()
-	msg := MsgAddObj{
+	msg := addObjMsg{
 		State: m.State(),
 		Key:   objKey,
 		SKey:  subKey,
@@ -67,7 +67,7 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 	key := m.Key()
 	sameSKey := psk == nsk
 	// Create the message to send to clients
-	msg := MsgModObj{
+	msg := modObjMessage{
 		Diff: m.Resolve(),
 		Key:  key,
 		SKey: psk,
@@ -100,7 +100,7 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 
 	// The object changed chunks. We will need to update two redis sets, and
 	// publish in two places.
-	addMsg := MsgAddObj{
+	addMsg := addObjMsg{
 		State: m.Object.State(),
 		Key:   key,
 		SKey:  nsk,
@@ -135,7 +135,7 @@ func redisDelObj(msg DelObj, rConn redis.Conn) error {
 	// Note that we are using the Previous subscription key. If we are deleting
 	// an object that was moving to another subscription, but the move was not yet
 	// resolved, the clients will still think the character is in the old subKey.
-	remMsg := MsgRemObj{
+	remMsg := remObjMsg{
 		SKey: msg.GetPrevSubKey(),
 		Key:  msg.Key(),
 	}

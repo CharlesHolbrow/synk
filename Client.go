@@ -324,7 +324,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		// current state to the web socket.
 		if len(objs) > 0 {
 			for _, obj := range objs {
-				bytes, err := json.Marshal(MsgAddObj{
+				bytes, err := json.Marshal(addObjMsg{
 					State: obj.State(),
 					Key:   obj.Key(),
 					SKey:  obj.GetSubKey(),

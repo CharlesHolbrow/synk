@@ -2,7 +2,10 @@ package synk
 
 import (
 	"math/rand"
+	"strconv"
 	"time"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // Untyped string constant. It's a string, but it's not a Go
@@ -40,4 +43,14 @@ func NewID() ID {
 
 func (id ID) String() string {
 	return string(id[:])
+}
+
+// GetID is a helper for retrieving unique ID for objects.
+// This is DEPRECATED in favor of RandomIDs.
+func getID(counterKey string, conn redis.Conn) (string, error) {
+	r, err := redis.Int(conn.Do("INCR", "count:"+counterKey))
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(int64(r), 36), nil
 }
