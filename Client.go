@@ -80,7 +80,7 @@ func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectCo
 	go client.startReadingFromRedis()
 	go client.startReadingFromWebSocket()
 
-	log.Println("Created new client:", client.ID, "Sending tilesets")
+	log.Println("synk.newClient created:", client.ID)
 	return client, nil
 }
 
