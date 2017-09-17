@@ -56,7 +56,7 @@ func Modify(obj Object, conn redis.Conn) (err error) {
 	return
 }
 
-// Messages that are sent TO HandleRedis
+// Messages that are sent TO HandleMessages
 
 // NewObj message is emitted by Fragment when an object is created
 type NewObj struct {
