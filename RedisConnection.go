@@ -56,9 +56,6 @@ func NewConnection(redisAddr string) *RedisConnection {
 // Note that creating an object in this way prevents us from knowing if the
 // object creation succeeded. If we want that, it might be worth getting a
 func (synkConn *RedisConnection) Create(obj Object) {
-	// add ID,
-	// copy object
-	// create AddObj
 	if obj.GetID() == "" {
 		obj.SetID(NewID().String())
 	}

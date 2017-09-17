@@ -54,7 +54,7 @@ func RequestByteSlices(conn redis.Conn, subKeys []string) ([]string, [][]byte, e
 	return keys, vals, nil
 }
 
-// RequestObjects tries to create an go object for every item in a slice of
+// RequestObjects tries to create a go object for every item in a slice of
 // subscrition keys.
 //
 // The caller must provide a function for converting typeKey+bytes to objects.

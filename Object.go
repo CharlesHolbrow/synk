@@ -1,5 +1,18 @@
 package synk
 
+import (
+	"github.com/garyburd/redigo/redis"
+)
+
+// There are two ways to modify Objects.
+// 1. The top level Create/Delete/Modify functions. Use these when you need
+//    confirmation
+// 2. The SynkRedisConnection's Create/Delete/Modify functions. I think these
+//    should work fine for most things: if the write fails, we need to re-get
+//    the collection we are working on, and re-start the simulation. Note that
+//    this is how we handle the client connection too -- If the connection is
+//    broken we just re-get the collection and continue where we left off.
+
 // Object is the interface for anything that will be saved in redis with diffs
 // that will be pushed to clients. The methods are a sub-set of the Character
 // interface methods.
@@ -17,7 +30,33 @@ type Object interface {
 	SetID(string) string
 }
 
-// Messages that are sent TO redis mutators methods
+// Create an object in redis. Wait for redis to respond.
+// Invokes object's Resolve() method
+func Create(obj Object, conn redis.Conn) error {
+	if obj.GetID() == "" {
+		obj.SetID(NewID().String())
+	}
+	obj.Resolve()
+	obj.Init()
+	return redisNewObject(obj, conn)
+}
+
+// Delete an object from Redis. Wait for redis to respond
+func Delete(obj Object, conn redis.Conn) error {
+	return redisDelObject(obj, conn)
+}
+
+// Modify an object. Wait for redis to respond.
+// Invokes object's Resolve() method
+func Modify(obj Object, conn redis.Conn) (err error) {
+	if obj.Changed() {
+		err = redisModObject(obj, conn)
+		obj.Resolve()
+	}
+	return
+}
+
+// Messages that are sent TO HandleRedis
 
 // NewObj message is emitted by Fragment when an object is created
 type NewObj struct {

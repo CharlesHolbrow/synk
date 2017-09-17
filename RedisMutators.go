@@ -14,11 +14,11 @@ import (
 func HandleMessage(msg interface{}, rConn redis.Conn) error {
 	switch msg := msg.(type) {
 	case ModObj:
-		return redisModObject(msg, rConn)
+		return redisModObject(msg.Object, rConn)
 	case NewObj:
-		return redisNewObject(msg, rConn)
+		return redisNewObject(msg.Object, rConn)
 	case DelObj:
-		return redisDelObj(msg, rConn)
+		return redisDelObject(msg.Object, rConn)
 	default:
 		txt := fmt.Sprintf("Unknown Message Type: %T", msg)
 		return errors.New(txt)
@@ -28,11 +28,11 @@ func HandleMessage(msg interface{}, rConn redis.Conn) error {
 // Note that if redisNewObject is passed an unresolved Object, The unresolved
 // version will be saved. This should be fine as long as the object gets
 // passed to redisModObj later.
-func redisNewObject(m NewObj, rConn redis.Conn) error {
-	subKey := m.GetSubKey()
-	objKey := m.Key()
+func redisNewObject(obj Object, rConn redis.Conn) error {
+	subKey := obj.GetSubKey()
+	objKey := obj.Key()
 	msg := addObjMsg{
-		State: m.State(),
+		State: obj.State(),
 		Key:   objKey,
 		SKey:  subKey,
 	}
@@ -42,7 +42,7 @@ func redisNewObject(m NewObj, rConn redis.Conn) error {
 		return errors.New("redisNewObject failed to convert diff to json")
 	}
 
-	redisJSON, err := json.Marshal(m.Object)
+	redisJSON, err := json.Marshal(obj)
 	if err != nil {
 		return errors.New("redisNewObject failed to convert object to json")
 	}
@@ -59,10 +59,10 @@ func redisNewObject(m NewObj, rConn redis.Conn) error {
 }
 
 // This is the newer updated Objects mutator.
-// Expects an unresolved object in the m ModObj message
+// Expects an unresolved object - But NOT a ModObj struct.
 // Send the diff to the old chunk
 // Send the full object to the new Chunk
-func redisModObject(m ModObj, rConn redis.Conn) error {
+func redisModObject(m Object, rConn redis.Conn) error {
 	// Previous and new Subscription keys
 	psk := m.GetPrevSubKey()
 	nsk := m.GetSubKey()
@@ -85,7 +85,7 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 	}
 
 	// This is the object we will save in redis
-	objJSON, err := json.Marshal(m.Object)
+	objJSON, err := json.Marshal(m)
 	if err != nil {
 		return errors.New("redisModObject failed to convert object to JSON")
 	}
@@ -103,7 +103,7 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 	// The object changed chunks. We will need to update two redis sets, and
 	// publish in two places.
 	addMsg := addObjMsg{
-		State: m.Object.State(),
+		State: m.State(),
 		Key:   key,
 		SKey:  nsk,
 		PSKey: psk,
@@ -132,7 +132,7 @@ func redisModObject(m ModObj, rConn redis.Conn) error {
 	return err
 }
 
-func redisDelObj(msg DelObj, rConn redis.Conn) error {
+func redisDelObject(msg Object, rConn redis.Conn) error {
 
 	// Note that we are using the Previous subscription key. If we are deleting
 	// an object that was moving to another subscription, but the move was not yet
