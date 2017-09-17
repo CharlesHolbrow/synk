@@ -6,6 +6,7 @@ package synk
 type Object interface {
 	State() interface{}
 	Resolve() interface{}
+	Changed() bool
 	Init()
 	Copy() Object
 	Key() string

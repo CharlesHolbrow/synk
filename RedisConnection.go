@@ -52,6 +52,9 @@ func NewConnection(redisAddr string) *RedisConnection {
 // the object:
 // - If the object has no ID, add a random ID
 // - call the objects Resolve() method, which clears the objects's diff
+//
+// Note that creating an object in this way prevents us from knowing if the
+// object creation succeeded. If we want that, it might be worth getting a
 func (synkConn *RedisConnection) Create(obj Object) {
 	// add ID,
 	// copy object
@@ -64,6 +67,17 @@ func (synkConn *RedisConnection) Create(obj Object) {
 	// set initial values. Resolve them here so the newly created object is
 	// up-to-date.
 	obj.Resolve()
+	// BUG(charles): Here's the ideal situation:
+	// - Wait until we have confirmation from redis. We have 2 options while we
+	//   wait for the reply from redis:
+	//     - During this time we may not modify the object.
+	//     - OR we may cache the current diff, and resolve the cached diff when
+	//       we get confirmation from redis. This second (more advanced)
+	//       approach could more helpful when modifying an object than when
+	//       creating an object. I have not fully thought through the
+	//       implications when creating an object.
+	// - If the write was successful, resolve the object
+	// - If the write failed, do not resolve.
 
 	// Remember, we can't write to a redigo connection concurrently. We must
 	// either copy the object, and send it to a channel dedicated to a single
@@ -77,4 +91,30 @@ func (synkConn *RedisConnection) Create(obj Object) {
 	objCopy.Init()
 
 	synkConn.ToRedis <- NewObj{objCopy}
+}
+
+// Delete an object from the DB and from clients
+//
+// IMPORTANT: The object must be unresolved, so that client side copies will
+// still think that the character is in the previous subscription key (in the
+// event that it changed subscription keys before being passed here). Only synk
+// code should ever call an objects .Resolve() method.
+func (synkConn *RedisConnection) Delete(obj Object) {
+	// I don't think we need to copy the object, because it should have already
+	// deleted from other places. This is not thoroughly tested, so I'm going to
+	// do it anyway for now.
+	// unresolved -- which means that the client side copies will still think
+	// that the character is in the previous subscription key.
+	synkConn.ToRedis <- DelObj{
+		Object: obj.Copy(),
+	}
+}
+
+// Modify an object in redis.
+func (synkConn *RedisConnection) Modify(obj Object) {
+	if obj.Changed() {
+		synkConn.ToRedis <- ModObj{Object: obj.Copy()}
+		// BUG(charles): see notes in Create about Resolving() immediately
+		obj.Resolve()
+	}
 }

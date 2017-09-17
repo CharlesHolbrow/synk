@@ -25,8 +25,10 @@ func HandleMessage(msg interface{}, rConn redis.Conn) error {
 	}
 }
 
+// Note that if redisNewObject is passed an unresolved Object, The unresolved
+// version will be saved. This should be fine as long as the object gets
+// passed to redisModObj later.
 func redisNewObject(m NewObj, rConn redis.Conn) error {
-	m.Resolve()
 	subKey := m.GetSubKey()
 	objKey := m.Key()
 	msg := addObjMsg{
