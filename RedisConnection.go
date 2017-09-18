@@ -64,17 +64,6 @@ func (synkConn *RedisConnection) Create(obj Object) {
 	// set initial values. Resolve them here so the newly created object is
 	// up-to-date.
 	obj.Resolve()
-	// BUG(charles): Here's the ideal situation:
-	// - Wait until we have confirmation from redis. We have 2 options while we
-	//   wait for the reply from redis:
-	//     - During this time we may not modify the object.
-	//     - OR we may cache the current diff, and resolve the cached diff when
-	//       we get confirmation from redis. This second (more advanced)
-	//       approach could more helpful when modifying an object than when
-	//       creating an object. I have not fully thought through the
-	//       implications when creating an object.
-	// - If the write was successful, resolve the object
-	// - If the write failed, do not resolve.
 
 	// Remember, we can't write to a redigo connection concurrently. We must
 	// either copy the object, and send it to a channel dedicated to a single
