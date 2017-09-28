@@ -18,6 +18,6 @@ type CustomClient interface {
 	OnSubscribe(client *Client, subKeys []string, objs []Object)
 }
 
-// A CustomClientConstructor must be supplied when implementin custom handlers.
+// A CustomClientConstructor must be supplied when implementing custom handlers.
 // The supplied function will create the custom message handler when clients connect
 type CustomClientConstructor func(client *Client) CustomClient
