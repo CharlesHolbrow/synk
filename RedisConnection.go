@@ -7,12 +7,28 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+// Helper struct used by toRedisChan
+type toRedis struct {
+	commandName string
+	args        []interface{}
+}
+
 // RedisConnection wraps a redigo connection Pool
 type RedisConnection struct {
-	addr       string
-	Pool       redis.Pool
-	objMsgConn redis.Conn  // will be passed to our mutator functions
-	ToRedis    chan Object // Should be one of NewObj, DelObj, or ModObj
+	addr string
+	Pool redis.Pool
+
+	// Objects sent to this channel should be one of NewObj, DelObj, or ModObj
+	// The associated redis connection will be passed to our mutator functions.
+	// Redis Connections are not safe for concurrent use.
+	MutateRedisChan chan Object
+	objMsgConn      redis.Conn
+
+	// Messages sent to this channel will be be forwarded to redis via the
+	// 'toRedisConn' channel. This channel is exposed publically with Synk
+	// methods like RedisConnection.Publish
+	toRedisChan chan toRedis
+	toRedisConn redis.Conn
 }
 
 // NewConnection builds a new AetherRedisConnection
@@ -31,11 +47,13 @@ func NewConnection(redisAddr string) *RedisConnection {
 			},
 		},
 	}
+
+	// This channel/connection combination is for mutating objects
+	arc.MutateRedisChan = make(chan Object, 128)
 	arc.objMsgConn = arc.Pool.Get()
-	arc.ToRedis = make(chan Object, 128)
 
 	go func() {
-		for msg := range arc.ToRedis {
+		for msg := range arc.MutateRedisChan {
 			err := HandleMessage(msg, arc.objMsgConn)
 			if err != nil {
 				log.Printf("NewConnection: Error sending message to redis:\n"+
@@ -43,6 +61,20 @@ func NewConnection(redisAddr string) *RedisConnection {
 					"\tMessage: %s\n", err, msg)
 			}
 		}
+	}()
+
+	// Continuously pump messages from toRedisChan to redis. Panic if there is
+	// an error sending to redis.
+	arc.toRedisChan = make(chan toRedis, 1000) // 1000 is arbitrary
+	arc.toRedisConn = arc.Pool.Get()
+
+	go func() {
+		for val := range arc.toRedisChan {
+			if _, err := arc.toRedisConn.Do(val.commandName, val.args...); err != nil {
+				log.Printf("synk.Handler encountered an error trying to send %v: %s", val, err)
+			}
+		}
+		log.Panicln("synk: NewHandler: handler.toRedisChan closed!")
 	}()
 
 	return arc
@@ -76,7 +108,7 @@ func (synkConn *RedisConnection) Create(obj Object) {
 	// to clients.
 	objCopy.Init()
 
-	synkConn.ToRedis <- NewObj{objCopy}
+	synkConn.MutateRedisChan <- NewObj{objCopy}
 }
 
 // Delete an object from the DB and from clients
@@ -91,7 +123,7 @@ func (synkConn *RedisConnection) Delete(obj Object) {
 	// do it anyway for now.
 	// unresolved -- which means that the client side copies will still think
 	// that the character is in the previous subscription key.
-	synkConn.ToRedis <- DelObj{
+	synkConn.MutateRedisChan <- DelObj{
 		Object: obj.Copy(),
 	}
 }
@@ -99,8 +131,13 @@ func (synkConn *RedisConnection) Delete(obj Object) {
 // Modify an object in redis.
 func (synkConn *RedisConnection) Modify(obj Object) {
 	if obj.Changed() {
-		synkConn.ToRedis <- ModObj{Object: obj.Copy()}
+		synkConn.MutateRedisChan <- ModObj{Object: obj.Copy()}
 		// BUG(charles): see notes in Create about Resolving() immediately
 		obj.Resolve()
 	}
+}
+
+// Publish updates sends a message to be processed by redis.
+func (synkConn *RedisConnection) Publish(args ...interface{}) {
+	synkConn.toRedisChan <- toRedis{commandName: "PUBLISH", args: args}
 }

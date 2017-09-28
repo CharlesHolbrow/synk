@@ -33,13 +33,13 @@ const (
 // The client does not know which pools it is a part of.
 type Client struct {
 	custom        CustomClient
-	RedisPool     *redis.Pool
+	Synk          *RedisConnection
 	builder       ObjectConstructor // How objects from redis will be created
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
 	rSubscription redis.PubSubConn // This uses rConn as the underlying conn
 	fromWebSocket chan interface{}
-	toWebSocket   chan []byte // safe so send messages here concurrently
+	toWebSocket   chan []byte // safe to send messages here concurrently
 	ID            ID
 	quit          chan bool
 	subscriptions map[string]bool
@@ -59,7 +59,7 @@ func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectCo
 	}
 
 	client = &Client{
-		RedisPool:     &synkConn.Pool,
+		Synk:          synkConn,
 		builder:       build,
 		wsConn:        wsConn,
 		rConn:         rConn,
@@ -305,7 +305,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 
 		// client.rConn is the connection used to create the subscription. We
 		// cannot use it to get the fragment. Grab another one from the pool.
-		rConn := client.RedisPool.Get()
+		rConn := client.Synk.Pool.Get()
 		objs, err := RequestObjects(rConn, msg.Add, client.builder)
 		// return rConn to the pool as soon as we are done with it
 		rConn.Close()
