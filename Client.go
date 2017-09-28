@@ -33,7 +33,7 @@ const (
 // The client does not know which pools it is a part of.
 type Client struct {
 	custom        CustomClient
-	Synk          *RedisConnection
+	Synk          *Synk
 	builder       ObjectConstructor // How objects from redis will be created
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
@@ -47,7 +47,7 @@ type Client struct {
 	waitGroup     sync.WaitGroup
 }
 
-func newClient(synkConn *RedisConnection, wsConn *websocket.Conn, build ObjectConstructor) (*Client, error) {
+func newClient(synkConn *Synk, wsConn *websocket.Conn, build ObjectConstructor) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 

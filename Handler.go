@@ -19,13 +19,13 @@ var upgrader = websocket.Upgrader{
 // websocket connection. Made to be used with the http.Handle function.
 type Handler struct {
 	clientPool      *ClientPool
-	synkConn        *RedisConnection
+	synkConn        *Synk
 	builder         ObjectConstructor
 	constructClient CustomClientConstructor
 }
 
 // NewHandler creates a WsHandler for use with http.Handle
-func NewHandler(synkConn *RedisConnection, builder ObjectConstructor, constructor CustomClientConstructor) *Handler {
+func NewHandler(synkConn *Synk, builder ObjectConstructor, constructor CustomClientConstructor) *Handler {
 
 	clientPool := newClientPool()
 	go clientPool.run()

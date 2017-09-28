@@ -13,8 +13,8 @@ type toRedis struct {
 	args        []interface{}
 }
 
-// RedisConnection wraps a redigo connection Pool
-type RedisConnection struct {
+// Synk wraps a redigo connection Pool
+type Synk struct {
 	addr string
 	Pool redis.Pool
 
@@ -32,8 +32,8 @@ type RedisConnection struct {
 }
 
 // NewConnection builds a new AetherRedisConnection
-func NewConnection(redisAddr string) *RedisConnection {
-	arc := &RedisConnection{
+func NewConnection(redisAddr string) *Synk {
+	arc := &Synk{
 		addr: redisAddr,
 		Pool: redis.Pool{
 			MaxIdle:     100,
@@ -87,7 +87,7 @@ func NewConnection(redisAddr string) *RedisConnection {
 //
 // Note that creating an object in this way prevents us from knowing if the
 // object creation succeeded. If we want that, it might be worth getting a
-func (synkConn *RedisConnection) Create(obj Object) {
+func (synkConn *Synk) Create(obj Object) {
 	if obj.GetID() == "" {
 		obj.SetID(NewID().String())
 	}
@@ -117,7 +117,7 @@ func (synkConn *RedisConnection) Create(obj Object) {
 // still think that the character is in the previous subscription key (in the
 // event that it changed subscription keys before being passed here). Only synk
 // code should ever call an objects .Resolve() method.
-func (synkConn *RedisConnection) Delete(obj Object) {
+func (synkConn *Synk) Delete(obj Object) {
 	// I don't think we need to copy the object, because it should have already
 	// deleted from other places. This is not thoroughly tested, so I'm going to
 	// do it anyway for now.
@@ -129,7 +129,7 @@ func (synkConn *RedisConnection) Delete(obj Object) {
 }
 
 // Modify an object in redis.
-func (synkConn *RedisConnection) Modify(obj Object) {
+func (synkConn *Synk) Modify(obj Object) {
 	if obj.Changed() {
 		synkConn.MutateRedisChan <- ModObj{Object: obj.Copy()}
 		// BUG(charles): see notes in Create about Resolving() immediately
@@ -138,6 +138,6 @@ func (synkConn *RedisConnection) Modify(obj Object) {
 }
 
 // Publish updates sends a message to be processed by redis.
-func (synkConn *RedisConnection) Publish(args ...interface{}) {
+func (synkConn *Synk) Publish(args ...interface{}) {
 	synkConn.toRedisChan <- toRedis{commandName: "PUBLISH", args: args}
 }
