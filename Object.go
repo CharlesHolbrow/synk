@@ -28,6 +28,7 @@ type Object interface {
 	GetPrevSubKey() string
 	GetID() string
 	SetID(string) string
+	Version() uint
 }
 
 // Create an object in redis. Wait for redis to respond.
@@ -83,9 +84,10 @@ type ModObj struct {
 // This is also the message that the client receives when the object is moving
 // from one chunk to another.
 type modObjMessage struct {
-	Method modObjMethod `json:"method"`
-	Diff   interface{}  `json:"diff"`
-	Key    string       `json:"key"`
+	Method  modObjMethod `json:"method"`
+	Diff    interface{}  `json:"diff"`
+	Key     string       `json:"key"`
+	Version uint         `json:"v"`
 	// SKey is the subscription key where the object is prior to movement.
 	SKey string `json:"sKey"`
 	// NSKey is the subscription key that the object is moving to. Only present if
@@ -109,7 +111,8 @@ type addObjMsg struct {
 	// SKey is where we add this object to
 	SKey string `json:"sKey"`
 	// If the object is moving from another chunk, include psKey
-	PSKey string `json:"psKey,omitempty"`
+	PSKey   string `json:"psKey,omitempty"`
+	Version uint   `json:"v"`
 }
 
 type addObjMethod struct{}

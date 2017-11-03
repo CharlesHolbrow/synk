@@ -32,9 +32,10 @@ func redisNewObject(obj Object, rConn redis.Conn) error {
 	subKey := obj.GetSubKey()
 	objKey := obj.Key()
 	msg := addObjMsg{
-		State: obj.State(),
-		Key:   objKey,
-		SKey:  subKey,
+		State:   obj.State(),
+		Key:     objKey,
+		SKey:    subKey,
+		Version: obj.Version(),
 	}
 
 	msgJSON, err := json.Marshal(msg)
@@ -70,9 +71,10 @@ func redisModObject(m Object, rConn redis.Conn) error {
 	sameSKey := psk == nsk
 	// Create the message to send to clients
 	msg := modObjMessage{
-		Diff: m.Resolve(),
-		Key:  key,
-		SKey: psk,
+		Diff:    m.Resolve(),
+		Key:     key,
+		SKey:    psk,
+		Version: m.Version(),
 	}
 
 	if !sameSKey {
@@ -103,10 +105,11 @@ func redisModObject(m Object, rConn redis.Conn) error {
 	// The object changed chunks. We will need to update two redis sets, and
 	// publish in two places.
 	addMsg := addObjMsg{
-		State: m.State(),
-		Key:   key,
-		SKey:  nsk,
-		PSKey: psk,
+		State:   m.State(),
+		Key:     key,
+		SKey:    nsk,
+		PSKey:   psk,
+		Version: m.Version(),
 	}
 	addJSON, err := json.Marshal(addMsg)
 	if err != nil {
