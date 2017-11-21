@@ -325,9 +325,10 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		if len(objs) > 0 {
 			for _, obj := range objs {
 				bytes, err := json.Marshal(addObjMsg{
-					State: obj.State(),
-					Key:   obj.Key(),
-					SKey:  obj.GetSubKey(),
+					State:   obj.State(),
+					Key:     obj.Key(),
+					SKey:    obj.GetSubKey(),
+					Version: obj.Version(),
 				})
 				if err != nil {
 					log.Printf("Client.updateSubscription failed to marshal %v\n", obj)
