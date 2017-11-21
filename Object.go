@@ -32,7 +32,7 @@ type Object interface {
 }
 
 // Create an object in redis. Wait for redis to respond.
-// Invokes object's Resolve() method
+// Invokes the object's Resolve() method
 func Create(obj Object, conn redis.Conn) error {
 	if obj.GetID() == "" {
 		obj.SetID(NewID().String())
