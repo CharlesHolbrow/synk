@@ -6,6 +6,10 @@ import (
 	"github.com/CharlesHolbrow/synk"
 )
 
+func (o *Human) Type() string {
+	return "c:h"
+}
+
 // Human is a test create for Pagen
 //@PA:c:h
 type Human struct {
@@ -25,12 +29,29 @@ type Human struct {
 // These methods are required to Satisfy the Object and Character interfaces
 
 // GetSubKey gets the most recent subscription key.
-func (c *Human) GetSubKey() string {
-	return fmt.Sprintf("%v:%v|%v", "000a", 8, -7)
+func (o *Human) GetSubKey() string {
+	return fmt.Sprintf("%v:%v|%v", o.GetMapID(), o.GetCX(), o.GetCY())
 }
 
 // GetPrevSubKey gets the previous subscription key.
-func (c *Human) GetPrevSubKey() string {
-	return fmt.Sprintf("%v:%v|%v", "000a", 8, -7)
-	// return ObjsKey(c.GetPrevMapID(), c.GetPrevCX(), c.GetPrevCY())
+func (o *Human) GetPrevSubKey() string {
+	return fmt.Sprintf("%v:%v|%v", o.GetPrevMapID(), o.GetPrevCX(), o.GetPrevCY())
+}
+
+func (o *Human) String() string {
+	return fmt.Sprintf("Human (%s) at (%d, %d) on %s", o.TagGetID(), o.GetX(), o.GetY(), o.GetMapID())
+}
+
+// Orc is another test creature on the map
+//@PA:c:o
+type Orc struct {
+	synk.Tag `bson:",inline"`
+	ID       string `json:"id"`
+	SubKey   string
+	Name     string
+	diff     orcDiff
+}
+
+func (c *Orc) String() string {
+	return fmt.Sprintf("Orc (%s) named %s", c.TagGetID(), c.Name)
 }
