@@ -1,8 +1,10 @@
 package synk
 
 import (
+	"encoding/json"
 	"log"
 
+	"github.com/garyburd/redigo/redis"
 	"gopkg.in/mgo.v2/bson"
 
 	mgo "gopkg.in/mgo.v2"
@@ -15,35 +17,22 @@ func epanic(reason string, err error) {
 	log.Panicln(reason, err.Error())
 }
 
-// ContainerConstructor creates an Object containers for a given type key. This
-// allows client code to pass in custom logic for building containers based on
-// client types
-type ContainerConstructor func(typeKey string) MongoObject
-
 // MongoSynk interfaces with the mongodb database
 type MongoSynk struct {
 	session *mgo.Session
 	db      *mgo.Database
-	creator ContainerConstructor
-}
-
-// MongoObject represents any object that can be saved in MongoDB
-type MongoObject interface {
-	Object
-	TagInit(typeKey string)
-	TagGetID() string
-	TagSetSub(sKey string)
+	RConn   redis.Conn
 }
 
 // NewMongoSynk returns a new MongoSynk instance. Panic if dialing mongo fails.
-func NewMongoSynk(creator ContainerConstructor) *MongoSynk {
+// BUG(charles): you are responsible for adding the Creator and RConn manually.
+func NewMongoSynk() *MongoSynk {
 	session, err := mgo.Dial("localhost")
 	epanic("Error connecting to mongo", err)
 
 	return &MongoSynk{
 		session: session,
 		db:      session.DB("synk"),
-		creator: creator,
 	}
 }
 
@@ -59,12 +48,11 @@ type typeOnly struct {
 
 // GetObjects retrieves all objects from MongoDB that are in a given slice of
 // subscription Keys
-func (ms *MongoSynk) GetObjects(collection string, sKeys []string) []MongoObject {
+func GetObjects(coll *mgo.Collection, sKeys []string, creator ContainerConstructor) []MongoObject {
 	var rawResults []bson.Raw
 	var results []MongoObject
 	var err error
 
-	coll := ms.db.C(collection)
 	err = coll.Find(bson.M{"sub": bson.M{"$in": sKeys}}).All(&rawResults)
 	epanic("MongoSynk.GetObjects: error with .All mongo query", err)
 
@@ -77,7 +65,7 @@ func (ms *MongoSynk) GetObjects(collection string, sKeys []string) []MongoObject
 			log.Println("MongoSynk.GetObjects failed to get ID from raw mongo object:", err.Error())
 			continue
 		}
-		container := ms.creator(temp.Type)
+		container := creator(temp.Type)
 		if container == nil {
 			log.Println("MongoSynk.GetObjects found no container for type:", temp.Type)
 			continue
@@ -191,6 +179,7 @@ func (ms *MongoSynk) Delete(obj MongoObject) {
 	msg := remMsg{
 		SKey: obj.GetPrevSubKey(),
 		ID:   obj.TagGetID(),
+		Type: obj.TypeKey(),
 	}
 
 	err := ms.db.C("objects").RemoveId(obj.TagGetID())
@@ -207,19 +196,39 @@ func (ms *MongoSynk) Delete(obj MongoObject) {
 
 func (ms *MongoSynk) send(msg addMsg) error {
 	log.Printf("[STUB] - Sending addMsg for %s to %s with type %s", msg.ID, msg.SKey, msg.Type)
-	return nil
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+	return err
 }
 func (ms *MongoSynk) sendMod(msg modMsg) error {
 	log.Printf("[STUB] - Sending modMsg for %s to %s", msg.ID, msg.SKey)
-	return nil
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+	return err
 }
 func (ms *MongoSynk) sendAddFrom(msg addMsg, from string) error {
 	log.Printf("[STUB] - Sending addMsg for %s to %s for object moving from %s", msg.ID, msg.SKey, from)
-	return nil
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = ms.RConn.Do("PUBLISH", msg.SKey, []byte("from "+msg.PSKey+string(bytes)))
+	return err
 }
 func (ms *MongoSynk) sendRem(msg remMsg) error {
 	log.Printf("[STUB] - Sending remMsg for %s to %s", msg.ID, msg.SKey)
-	return nil
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+	return err
 }
 
 ////////////////////////////////////////////////////////////////
@@ -232,9 +241,9 @@ func (ms *MongoSynk) sendRem(msg remMsg) error {
 // This would happen when an object moves into the client's subscription, OR
 // when an object is newly created.
 type addMsg struct {
-	Method addObjMethod `json:"method"`
-	State  interface{}  `json:"state"`
-	ID     string       `json:"id"`
+	Method addMethod   `json:"method"`
+	State  interface{} `json:"state"`
+	ID     string      `json:"id"`
 	// SKey is where we add this object to
 	SKey string `json:"sKey"`
 	// If the object is moving from another chunk, include psKey
@@ -267,7 +276,7 @@ type modMsg struct {
 
 type modMethod struct{}
 
-func (m modMsg) MarshalJSON() ([]byte, error) {
+func (m modMethod) MarshalJSON() ([]byte, error) {
 	return []byte("\"mod\""), nil
 }
 
@@ -275,9 +284,10 @@ func (m modMsg) MarshalJSON() ([]byte, error) {
 // message that a client gets when an object is moving from one chunk to
 // another, even if the client is not subscribed to the destination.
 type remMsg struct {
-	Method remObjMethod `json:"method"`
-	SKey   string       `json:"sKey"`
-	ID     string       `json:"id"`
+	Method remMethod `json:"method"`
+	SKey   string    `json:"sKey"`
+	Type   string    `json:"t"`
+	ID     string    `json:"id"`
 }
 
 type remMethod struct{}

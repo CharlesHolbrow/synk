@@ -15,7 +15,7 @@ package synk
 type CustomClient interface {
 	OnConnect(client *Client)
 	OnMessage(client *Client, method string, data []byte)
-	OnSubscribe(client *Client, subKeys []string, objs []Object)
+	OnSubscribe(client *Client, subKeys []string, objs []MongoObject)
 }
 
 // A CustomClientConstructor must be supplied when implementing custom handlers.

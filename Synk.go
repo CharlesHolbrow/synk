@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/garyburd/redigo/redis"
+	mgo "gopkg.in/mgo.v2"
 )
 
 // Helper struct used by toRedisChan
@@ -29,10 +30,19 @@ type Synk struct {
 	// methods like RedisConnection.Publish
 	toRedisChan chan toRedis
 	toRedisConn redis.Conn
+
+	// I am migrating from Redis to MongoDB
+	MongoSynk *MongoSynk //BUG(charles): Monogo refactor - Is this even needed?
+	Mongo     *mgo.Session
 }
 
 // NewConnection builds a new AetherRedisConnection
 func NewConnection(redisAddr string) *Synk {
+	session, err := mgo.Dial("localhost")
+	if err != nil {
+		panic("Error Dialing mongodb: " + err.Error())
+	}
+
 	arc := &Synk{
 		addr: redisAddr,
 		Pool: redis.Pool{
@@ -46,7 +56,11 @@ func NewConnection(redisAddr string) *Synk {
 				return conn, err
 			},
 		},
+		MongoSynk: NewMongoSynk(), //BUG(charles): Monogo refactor - Is this even needed?
+		Mongo:     session,
 	}
+
+	arc.MongoSynk.RConn = arc.Pool.Get()
 
 	// This channel/connection combination is for mutating objects
 	arc.MutateRedisChan = make(chan Object, 128)

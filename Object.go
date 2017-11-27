@@ -4,33 +4,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// There are two ways to modify Objects.
-// 1. The top level Create/Delete/Modify functions. Use these when you need
-//    confirmation
-// 2. The SynkRedisConnection's Create/Delete/Modify functions. I think these
-//    should work fine for most things: if the write fails, we need to re-get
-//    the collection we are working on, and re-start the simulation. Note that
-//    this is how we handle the client connection too -- If the connection is
-//    broken we just re-get the collection and continue where we left off.
-
-// Object is the interface for anything that will be saved in redis with diffs
-// that will be pushed to clients. The methods are a sub-set of the Character
-// interface methods.
-type Object interface {
-	State() interface{}
-	Resolve() interface{}
-	Changed() bool
-	Init()
-	Copy() Object
-	Key() string
-	TypeKey() string
-	GetSubKey() string
-	GetPrevSubKey() string
-	GetID() string
-	SetID(string) string
-	Version() uint
-}
-
 // Create an object in redis. Wait for redis to respond.
 // Invokes the object's Resolve() method
 func Create(obj Object, conn redis.Conn) error {
@@ -64,7 +37,8 @@ type NewObj struct {
 	Object
 }
 
-// DelObj message is emitted by Fragment when an object is removed from the map altogether
+// DelObj message is emitted by Fragment when an object is removed from the map
+// altogether
 type DelObj struct {
 	Object
 }

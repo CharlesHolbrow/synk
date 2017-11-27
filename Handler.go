@@ -20,12 +20,12 @@ var upgrader = websocket.Upgrader{
 type Handler struct {
 	clientPool      *ClientPool
 	synkConn        *Synk
-	builder         ObjectConstructor
+	constructor     ContainerConstructor
 	constructClient CustomClientConstructor
 }
 
 // NewHandler creates a WsHandler for use with http.Handle
-func NewHandler(synkConn *Synk, builder ObjectConstructor, constructor CustomClientConstructor) *Handler {
+func NewHandler(synkConn *Synk, builder ContainerConstructor, constructor CustomClientConstructor) *Handler {
 
 	clientPool := newClientPool()
 	go clientPool.run()
@@ -33,7 +33,7 @@ func NewHandler(synkConn *Synk, builder ObjectConstructor, constructor CustomCli
 	h := &Handler{
 		synkConn:        synkConn,
 		clientPool:      clientPool,
-		builder:         builder,
+		constructor:     builder,
 		constructClient: constructor,
 	}
 
@@ -52,7 +52,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a new Client object
-	client, err := newClient(h.synkConn, wsConn, h.builder)
+	client, err := newClient(h.synkConn, wsConn, h.constructor)
 	if err != nil {
 		log.Println("Failed to create Client:", err)
 		wsConn.Close()

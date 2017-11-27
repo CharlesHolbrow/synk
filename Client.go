@@ -34,7 +34,8 @@ const (
 type Client struct {
 	custom        CustomClient
 	Synk          *Synk
-	builder       ObjectConstructor // How objects from redis will be created
+	MongoSynk     *MongoSynk
+	creator       ContainerConstructor // How objects from mongo will be created
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
 	rSubscription redis.PubSubConn // This uses rConn as the underlying conn
@@ -47,7 +48,7 @@ type Client struct {
 	waitGroup     sync.WaitGroup
 }
 
-func newClient(synkConn *Synk, wsConn *websocket.Conn, build ObjectConstructor) (*Client, error) {
+func newClient(synkConn *Synk, wsConn *websocket.Conn, creator ContainerConstructor) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 
@@ -60,7 +61,8 @@ func newClient(synkConn *Synk, wsConn *websocket.Conn, build ObjectConstructor) 
 
 	client = &Client{
 		Synk:          synkConn,
-		builder:       build,
+		MongoSynk:     NewMongoSynk(), // BUG(charles): Mongo Refactor we should use Session.Copy() rather than creating for each client
+		creator:       creator,        // Does every instance of client really need it's own creator?
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},
@@ -75,6 +77,13 @@ func newClient(synkConn *Synk, wsConn *websocket.Conn, build ObjectConstructor) 
 		subscriptions: make(map[string]bool),
 	}
 	client.waitGroup.Add(1)
+
+	// BUG(charles) Mongo refactor: Eventually this will not be needed OR it will replaced with NATS.io
+	client.MongoSynk.RConn = client.Synk.Pool.Get()
+	go func() {
+		client.waitGroup.Wait()
+		client.MongoSynk.RConn.Close()
+	}()
 
 	go client.startMainLoop()
 	go client.startReadingFromRedis()
@@ -124,6 +133,10 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 	split := strings.Index(s, "{")
 	if split == 0 {
 		client.toWebSocket <- bytes
+		return
+	}
+	if split == -1 {
+		fmt.Printf("synk.Client: Error with bytes from redis: %s\n", bytes)
 		return
 	}
 
@@ -305,10 +318,13 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 
 		// client.rConn is the connection used to create the subscription. We
 		// cannot use it to get the fragment. Grab another one from the pool.
-		rConn := client.Synk.Pool.Get()
-		objs, err := RequestObjects(rConn, msg.Add, client.builder)
-		// return rConn to the pool as soon as we are done with it
-		rConn.Close()
+		// rConn := client.Synk.Pool.Get()
+		// objs, err := RequestObjects(rConn, msg.Add, client.builder)
+		// // return rConn to the pool as soon as we are done with it
+		// rConn.Close()
+		// The new way of getting objects!
+		coll := client.MongoSynk.session.DB("synk").C("objects")
+		objs := GetObjects(coll, msg.Add, client.creator)
 
 		if err != nil {
 			log.Printf("Client.updateSubscription: error geting Objects: %s\n", err)
@@ -324,11 +340,12 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 		// current state to the web socket.
 		if len(objs) > 0 {
 			for _, obj := range objs {
-				bytes, err := json.Marshal(addObjMsg{
+				bytes, err := json.Marshal(addMsg{
 					State:   obj.State(),
-					Key:     obj.Key(),
+					ID:      obj.TagGetID(),
 					SKey:    obj.GetSubKey(),
 					Version: obj.Version(),
+					Type:    obj.TypeKey(),
 				})
 				if err != nil {
 					log.Printf("Client.updateSubscription failed to marshal %v\n", obj)

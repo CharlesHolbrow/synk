@@ -1,6 +1,7 @@
 package synk
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -58,14 +59,14 @@ func RequestByteSlices(conn redis.Conn, subKeys []string) ([]string, [][]byte, e
 // subscrition keys.
 //
 // The caller must provide a function for converting typeKey+bytes to objects.
-func RequestObjects(conn redis.Conn, subKeys []string, buildObj ObjectConstructor) ([]Object, error) {
+func RequestObjects(conn redis.Conn, subKeys []string, constructor ContainerConstructor) ([]Object, error) {
 	keys, vals, err := RequestByteSlices(conn, subKeys)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]Object, len(keys))
-	j := 0
+	results := make([]Object, 0, len(keys))
+
 	for i, key := range keys {
 
 		// Pass the typeKey in to the ObjectLoader. Note that we are not passing
@@ -79,16 +80,21 @@ func RequestObjects(conn redis.Conn, subKeys []string, buildObj ObjectConstructo
 			key = key[:index]
 		}
 
-		obj, err := buildObj(key, vals[i])
+		container := constructor(key)
+		if container == nil {
+			return nil, errors.New("No container for type: " + key)
+		}
+
+		err = json.Unmarshal(vals[i], container)
+
 		if err == nil {
-			results[j] = obj
-			j++
+			results = append(results, container)
 		} else {
 			//BUG(charles): error is handled twice
 			log.Printf("Failed RequestObjects failed to create object: %s\n", err)
 		}
 	}
-	return results[:j], err
+	return results, err
 }
 
 // LoadObjects calls the LoadObject(typeKey, bytes) method of the supplied
