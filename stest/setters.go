@@ -7,9 +7,9 @@ type humanDiff struct {
   X *int `json:"x,omitempty"`
   Y *int `json:"y,omitempty"`
   CY *int `json:"cy,omitempty"`
-  MapID *string `json:"mapID,omitempty"`
   CX *int `json:"cx,omitempty"`
   CI *int `json:"ci,omitempty"`
+  MapID *string `json:"mapID,omitempty"`
 }
 
 // State returns a fully populated diff of the unresolved state
@@ -18,9 +18,9 @@ func (o *Human) State() interface{} {
     X: &o.X,
     Y: &o.Y,
     CY: &o.CY,
-    MapID: &o.MapID,
     CX: &o.CX,
     CI: &o.CI,
+    MapID: &o.MapID,
   }
   return d
 }
@@ -30,9 +30,9 @@ func (o *Human) Resolve() interface{} {
   if o.diff.X != nil {o.X = *o.diff.X}
   if o.diff.Y != nil {o.Y = *o.diff.Y}
   if o.diff.CY != nil {o.CY = *o.diff.CY}
-  if o.diff.MapID != nil {o.MapID = *o.diff.MapID}
   if o.diff.CX != nil {o.CX = *o.diff.CX}
   if o.diff.CI != nil {o.CI = *o.diff.CI}
+  if o.diff.MapID != nil {o.MapID = *o.diff.MapID}
   o.V++
   diff := o.diff
   o.diff = humanDiff{}
@@ -44,17 +44,11 @@ func (o *Human) Changed() bool {
   return o.diff.X != nil ||
 		o.diff.Y != nil ||
 		o.diff.CY != nil ||
-		o.diff.MapID != nil ||
 		o.diff.CX != nil ||
-		o.diff.CI != nil
+		o.diff.CI != nil ||
+		o.diff.MapID != nil
 }
 
-// TypeKey getter for main and diff structs
-func (o *Human) TypeKey() string { return "c:h" }
-// Key getter for main object
-func (o *Human) Key() string { return "c:h:"+o.ID }
-// TypeKey getter for main and diff structs
-func (o humanDiff) TypeKey() string { return "c:h" }
 // Diff getter
 func (o *Human) Diff() interface{} { return o.diff }
 // Copy duplicates this object and returns an interface to it.
@@ -71,16 +65,6 @@ func (o *Human) Copy() synk.Object {
 // Resolve() will return a diff with all the fields initialized.
 func (o *Human) Init() {
 	o.diff = o.State().(humanDiff)
-}
-// GetID returns the ID
-func (o *Human) GetID() string { return o.ID }
-// SetID -- but only if it has not been set. This helps us avoid accidentally
-// setting it twice. Return the item's ID either way.
-func (o *Human) SetID(id string) string {
-	if o.ID == "" {
-		o.ID = id
-	}
-	return o.ID
 }
 // SetX on diff
 func (o *Human) SetX(v int) {
@@ -139,25 +123,6 @@ func (o *Human) GetCY() int {
 }
 // GetCY. Diff method
 func (o humanDiff) GetCY() *int { return o.CY }
-// SetMapID on diff
-func (o *Human) SetMapID(v string) {
-  if v != o.MapID {
-    o.diff.MapID = &v
-  } else {
-    o.diff.MapID = nil
-  }
-}
-// GetPrevMapID Gets the previous value. Ignores diff.
-func (o *Human) GetPrevMapID() string { return o.MapID }
-// GetMapID from diff. Fall back to current value if no diff
-func (o *Human) GetMapID() string {
-	if o.diff.MapID != nil {
-		return *o.diff.MapID
-	}
-	return o.MapID
-}
-// GetMapID. Diff method
-func (o humanDiff) GetMapID() *string { return o.MapID }
 // SetCX on diff
 func (o *Human) SetCX(v int) {
   if v != o.CX {
@@ -196,8 +161,28 @@ func (o *Human) GetCI() int {
 }
 // GetCI. Diff method
 func (o humanDiff) GetCI() *int { return o.CI }
+// SetMapID on diff
+func (o *Human) SetMapID(v string) {
+  if v != o.MapID {
+    o.diff.MapID = &v
+  } else {
+    o.diff.MapID = nil
+  }
+}
+// GetPrevMapID Gets the previous value. Ignores diff.
+func (o *Human) GetPrevMapID() string { return o.MapID }
+// GetMapID from diff. Fall back to current value if no diff
+func (o *Human) GetMapID() string {
+	if o.diff.MapID != nil {
+		return *o.diff.MapID
+	}
+	return o.MapID
+}
+// GetMapID. Diff method
+func (o humanDiff) GetMapID() *string { return o.MapID }
 // orcDiff diff type for synk.Object
 type orcDiff struct {
+  ID *string `json:"id,omitempty"`
   SubKey *string `json:"subKey,omitempty"`
   Name *string `json:"name,omitempty"`
 }
@@ -205,6 +190,7 @@ type orcDiff struct {
 // State returns a fully populated diff of the unresolved state
 func (o *Orc) State() interface{} {
 	d := orcDiff{
+    ID: &o.ID,
     SubKey: &o.SubKey,
     Name: &o.Name,
   }
@@ -213,6 +199,7 @@ func (o *Orc) State() interface{} {
 
 // Resolve applies the current diff, then returns it
 func (o *Orc) Resolve() interface{} {
+  if o.diff.ID != nil {o.ID = *o.diff.ID}
   if o.diff.SubKey != nil {o.SubKey = *o.diff.SubKey}
   if o.diff.Name != nil {o.Name = *o.diff.Name}
   o.V++
@@ -223,16 +210,11 @@ func (o *Orc) Resolve() interface{} {
 
 // Changed checks if struct has been changed since the last .Resolve()
 func (o *Orc) Changed() bool {
-  return o.diff.SubKey != nil ||
+  return o.diff.ID != nil ||
+		o.diff.SubKey != nil ||
 		o.diff.Name != nil
 }
 
-// TypeKey getter for main and diff structs
-func (o *Orc) TypeKey() string { return "c:o" }
-// Key getter for main object
-func (o *Orc) Key() string { return "c:o:"+o.ID }
-// TypeKey getter for main and diff structs
-func (o orcDiff) TypeKey() string { return "c:o" }
 // Diff getter
 func (o *Orc) Diff() interface{} { return o.diff }
 // Copy duplicates this object and returns an interface to it.
@@ -250,16 +232,25 @@ func (o *Orc) Copy() synk.Object {
 func (o *Orc) Init() {
 	o.diff = o.State().(orcDiff)
 }
-// GetID returns the ID
-func (o *Orc) GetID() string { return o.ID }
-// SetID -- but only if it has not been set. This helps us avoid accidentally
-// setting it twice. Return the item's ID either way.
-func (o *Orc) SetID(id string) string {
-	if o.ID == "" {
-		o.ID = id
+// SetID on diff
+func (o *Orc) SetID(v string) {
+  if v != o.ID {
+    o.diff.ID = &v
+  } else {
+    o.diff.ID = nil
+  }
+}
+// GetPrevID Gets the previous value. Ignores diff.
+func (o *Orc) GetPrevID() string { return o.ID }
+// GetID from diff. Fall back to current value if no diff
+func (o *Orc) GetID() string {
+	if o.diff.ID != nil {
+		return *o.diff.ID
 	}
 	return o.ID
 }
+// GetID. Diff method
+func (o orcDiff) GetID() *string { return o.ID }
 // SetSubKey on diff
 func (o *Orc) SetSubKey(v string) {
   if v != o.SubKey {

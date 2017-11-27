@@ -14,8 +14,6 @@ func (o *Human) Type() string {
 //@PA:c:h
 type Human struct {
 	synk.Tag `json:"-" bson:",inline"`
-	// ID
-	ID string `json:"id"`
 	// X, Y, and some others are mandatory for Character
 	X     int    `json:"x"`
 	Y     int    `json:"y"`
@@ -38,6 +36,11 @@ func (o *Human) GetPrevSubKey() string {
 	return fmt.Sprintf("%v:%v|%v", o.GetPrevMapID(), o.GetPrevCX(), o.GetPrevCY())
 }
 
+// TypeKey identifies the object type
+func (o *Human) TypeKey() string {
+	return "c:h"
+}
+
 func (o *Human) String() string {
 	return fmt.Sprintf("Human (%s) at (%d, %d) on %s", o.TagGetID(), o.GetX(), o.GetY(), o.GetMapID())
 }
@@ -54,4 +57,9 @@ type Orc struct {
 
 func (c *Orc) String() string {
 	return fmt.Sprintf("Orc (%s) named %s", c.TagGetID(), c.Name)
+}
+
+// TypeKey identifies the object type
+func (o *Orc) TypeKey() string {
+	return "c:o"
 }
