@@ -47,7 +47,7 @@ func NewConnection(redisAddr string) *Synk {
 			Dial: func() (redis.Conn, error) {
 				conn, err := redis.Dial("tcp", redisAddr, redis.DialConnectTimeout(8*time.Second))
 				if err != nil {
-					log.Println("Failed to connect to redis:", err.Error())
+					panic("Failed to connect to redis: " + err.Error())
 				}
 				return conn, err
 			},
@@ -106,7 +106,7 @@ func (synkConn *Synk) Create(obj Object) {
 	// to clients.
 	objCopy.Init()
 
-	synkConn.MutateRedisChan <- NewObj{objCopy}
+	synkConn.MutateRedisChan <- newObj{objCopy}
 }
 
 // Delete an object from the DB and from clients
@@ -121,7 +121,7 @@ func (synkConn *Synk) Delete(obj Object) {
 	// do it anyway for now.
 	// unresolved -- which means that the client side copies will still think
 	// that the character is in the previous subscription key.
-	synkConn.MutateRedisChan <- DelObj{
+	synkConn.MutateRedisChan <- delObj{
 		Object: obj.Copy(),
 	}
 }
@@ -129,7 +129,7 @@ func (synkConn *Synk) Delete(obj Object) {
 // Modify an object in redis.
 func (synkConn *Synk) Modify(obj Object) {
 	if obj.Changed() {
-		synkConn.MutateRedisChan <- ModObj{Object: obj.Copy()}
+		synkConn.MutateRedisChan <- modObj{Object: obj.Copy()}
 		// BUG(charles): see notes in Create about Resolving() immediately
 		obj.Resolve()
 	}

@@ -6,10 +6,6 @@ import (
 	"github.com/CharlesHolbrow/synk"
 )
 
-func (o *Human) Type() string {
-	return "c:h"
-}
-
 // Human is a test create for Pagen
 //@PA:c:h
 type Human struct {
@@ -24,7 +20,12 @@ type Human struct {
 	diff  humanDiff
 }
 
-// These methods are required to Satisfy the Object and Character interfaces
+// These methods are required to satisfy the Object and Character interfaces
+
+// TypeKey identifies the object type
+func (o *Human) TypeKey() string {
+	return "c:h"
+}
 
 // GetSubKey gets the most recent subscription key.
 func (o *Human) GetSubKey() string {
@@ -34,11 +35,6 @@ func (o *Human) GetSubKey() string {
 // GetPrevSubKey gets the previous subscription key.
 func (o *Human) GetPrevSubKey() string {
 	return fmt.Sprintf("%v:%v|%v", o.GetPrevMapID(), o.GetPrevCX(), o.GetPrevCY())
-}
-
-// TypeKey identifies the object type
-func (o *Human) TypeKey() string {
-	return "c:h"
 }
 
 func (o *Human) String() string {
@@ -60,6 +56,6 @@ func (c *Orc) String() string {
 }
 
 // TypeKey identifies the object type
-func (o *Orc) TypeKey() string {
+func (c *Orc) TypeKey() string {
 	return "c:o"
 }

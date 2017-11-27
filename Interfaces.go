@@ -36,18 +36,6 @@ type Object interface {
 	TagSetSub(sKey string)
 }
 
-type NewObj struct {
-	Object
-}
-
-type ModObj struct {
-	Object
-}
-
-type DelObj struct {
-	Object
-}
-
 // Mutator represents a type that can get and modify objects.
 //
 // Typically a Mutator object will be constructed by client code, and

@@ -313,3 +313,40 @@ func redisDelObject(obj Object, rConn redis.Conn) error {
 
 	return err
 }
+
+/******************************************************************************
+The methods below are part of a functionality for parallelizing object mutation.
+
+As of November 2017 these are unused, but I will certainly need this working at
+some point in the future. Currently we have to wait for the DB after every
+mutation.
+*******************************************************************************/
+
+// HandleMessage applies the supplied Message to a given redigo connection.
+// It should mutate the database and publish any JSON messages required to
+// update clients subscribed to the db.
+func redisHandleMessage(msg interface{}, rConn redis.Conn) error {
+	switch msg := msg.(type) {
+	case modObj:
+		return redisModObject(msg.Object, rConn)
+	case newObj:
+		return redisNewObject(msg.Object, rConn)
+	case delObj:
+		return redisDelObject(msg.Object, rConn)
+	default:
+		txt := fmt.Sprintf("Unknown Message Type: %T", msg)
+		return errors.New(txt)
+	}
+}
+
+type newObj struct {
+	Object
+}
+
+type modObj struct {
+	Object
+}
+
+type delObj struct {
+	Object
+}

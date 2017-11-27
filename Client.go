@@ -60,16 +60,15 @@ func newClient(synkConn *Synk, wsConn *websocket.Conn, creator ContainerConstruc
 	}
 
 	// This MongoSynk object will only be used for Getting Objects, so we can
-	// safely omit the telemetry collection
+	// safely omit the telemetry connection
 	mSynk := &MongoSynk{
 		Coll:    synkConn.Mongo.Copy().DB("synk").C("objects"),
 		Creator: creator,
 	}
 
 	client = &Client{
-		Synk:    synkConn,
-		Mutator: mSynk,
-
+		Synk:          synkConn,
+		Mutator:       mSynk,
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},
