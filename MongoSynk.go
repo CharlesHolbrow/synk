@@ -202,7 +202,6 @@ func (ms *MongoSynk) Close() error {
 ////////////////////////////////////////////////////////////////
 
 func (ms *MongoSynk) send(msg addMsg) error {
-	log.Printf("[STUB] - Sending addMsg for %s to %s with type %s", msg.ID, msg.SKey, msg.Type)
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -211,7 +210,6 @@ func (ms *MongoSynk) send(msg addMsg) error {
 	return err
 }
 func (ms *MongoSynk) sendMod(msg modMsg) error {
-	log.Printf("[STUB] - Sending modMsg for %s to %s", msg.ID, msg.SKey)
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -220,7 +218,6 @@ func (ms *MongoSynk) sendMod(msg modMsg) error {
 	return err
 }
 func (ms *MongoSynk) sendAddFrom(msg addMsg, from string) error {
-	log.Printf("[STUB] - Sending addMsg for %s to %s for object moving from %s", msg.ID, msg.SKey, from)
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -229,7 +226,6 @@ func (ms *MongoSynk) sendAddFrom(msg addMsg, from string) error {
 	return err
 }
 func (ms *MongoSynk) sendRem(msg remMsg) error {
-	log.Printf("[STUB] - Sending remMsg for %s to %s", msg.ID, msg.SKey)
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
