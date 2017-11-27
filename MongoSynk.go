@@ -38,15 +38,15 @@ type typeOnly struct {
 
 // Load retrieves all objects from MongoDB that are in a given slice of
 // subscription Keys
-func (ms *MongoSynk) Load(sKeys []string) ([]MongoObject, error) {
+func (ms *MongoSynk) Load(sKeys []string) ([]Object, error) {
 	var rawResults []bson.Raw
-	var results []MongoObject
+	var results []Object
 	var err error
 
 	err = ms.Coll.Find(bson.M{"sub": bson.M{"$in": sKeys}}).All(&rawResults)
 	epanic("MongoSynk.GetObjects: error with .All mongo query", err)
 
-	results = make([]MongoObject, 0, len(rawResults))
+	results = make([]Object, 0, len(rawResults))
 	for _, raw := range rawResults {
 
 		temp := typeOnly{}
@@ -77,7 +77,7 @@ func (ms *MongoSynk) Load(sKeys []string) ([]MongoObject, error) {
 ////////////////////////////////////////////////////////////////
 
 // Create an object, and send an add message
-func (ms *MongoSynk) Create(obj MongoObject) error {
+func (ms *MongoSynk) Create(obj Object) error {
 	typeKey := obj.TypeKey()
 
 	// This will set the object's ID and Type, so that the correct value will
@@ -110,7 +110,7 @@ func (ms *MongoSynk) Create(obj MongoObject) error {
 }
 
 // Modify a MongoObject, publishing a mod message once the mutation is complete.
-func (ms *MongoSynk) Modify(obj MongoObject) error {
+func (ms *MongoSynk) Modify(obj Object) error {
 	var err error
 
 	nsk := obj.GetSubKey()
@@ -129,8 +129,8 @@ func (ms *MongoSynk) Modify(obj MongoObject) error {
 		Version: obj.Version(),
 	}
 
-	if simple {
-		msg.SKey = nsk
+	if !simple {
+		msg.NSKey = nsk
 	}
 
 	if simple {
@@ -153,6 +153,7 @@ func (ms *MongoSynk) Modify(obj MongoObject) error {
 		SKey:    nsk,
 		PSKey:   psk,
 		Version: obj.Version(),
+		Type:    obj.TypeKey(),
 	}
 
 	obj.TagSetSub(nsk)
@@ -168,7 +169,11 @@ func (ms *MongoSynk) Modify(obj MongoObject) error {
 }
 
 // Delete an object from the db, publishing a rem message on completion.
-func (ms *MongoSynk) Delete(obj MongoObject) error {
+func (ms *MongoSynk) Delete(obj Object) error {
+
+	// Note that we are using the Previous subscription key. If we are deleting
+	// an object that was moving to another subscription, but the move was not yet
+	// resolved, the clients will still think the character is in the old subKey.
 	msg := remMsg{
 		SKey: obj.GetPrevSubKey(),
 		ID:   obj.TagGetID(),

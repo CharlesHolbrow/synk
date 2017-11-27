@@ -6,9 +6,11 @@ import (
 	"testing"
 
 	"github.com/CharlesHolbrow/synk"
+	"github.com/garyburd/redigo/redis"
+	mgo "gopkg.in/mgo.v2"
 )
 
-func creator(typeKey string) synk.MongoObject {
+func creator(typeKey string) synk.Object {
 	switch typeKey {
 	case "c:h":
 		return &Human{}
@@ -18,8 +20,23 @@ func creator(typeKey string) synk.MongoObject {
 	return nil
 }
 
+func epanic(message string, err error) {
+	if err != nil {
+		panic(message + err.Error())
+	}
+}
+
 func TestHuman_GetSubKey(t *testing.T) {
-	ms := synk.NewMongoSynk(creator)
+	session, err := mgo.Dial("localhost")
+	epanic("failed to dial mongodb:", err)
+	rConn, err := redis.Dial("tcp", ":6379")
+	epanic("failed to dial redis:", err)
+
+	ms := synk.MongoSynk{
+		Coll:    session.DB("synk").C("objects"),
+		Creator: creator,
+		RConn:   rConn,
+	}
 
 	h := &Human{}
 	// h.TagKey = "TestChar3"
@@ -33,9 +50,9 @@ func TestHuman_GetSubKey(t *testing.T) {
 	h.SetY(h.GetY() + 1)
 	ms.Modify(h)
 
-	var o2 synk.MongoObject
+	var o2 synk.Object
 
-	objects := ms.GetObjects("objects", []string{h.GetSubKey()})
+	objects, err := ms.Load([]string{h.GetSubKey()})
 	fmt.Println("Length of results:", len(objects))
 
 	found := false

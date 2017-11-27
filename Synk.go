@@ -19,17 +19,14 @@ type Synk struct {
 	addr string
 	Pool redis.Pool
 
-	// Objects sent to this channel should be one of NewObj, DelObj, or ModObj
-	// The associated redis connection will be passed to our mutator functions.
-	// Redis Connections are not safe for concurrent use.
-	MutateRedisChan chan Object
-	objMsgConn      redis.Conn
-
 	// Messages sent to this channel will be be forwarded to redis via the
 	// 'toRedisConn' channel. This channel is exposed publically with Synk
 	// methods like RedisConnection.Publish
 	toRedisChan chan toRedis
 	toRedisConn redis.Conn
+
+	// BUG(charles): MutateRedisChan is deprecated
+	MutateRedisChan chan Object
 
 	// I am migrating from Redis to MongoDB
 	Mongo *mgo.Session
@@ -58,18 +55,11 @@ func NewConnection(redisAddr string) *Synk {
 		Mongo: session,
 	}
 
-	// This channel/connection combination is for mutating objects
-	arc.MutateRedisChan = make(chan Object, 128)
-	arc.objMsgConn = arc.Pool.Get()
-
+	// Continuously pump messages from MutateRedisChan
+	arc.MutateRedisChan = make(chan Object)
 	go func() {
-		for msg := range arc.MutateRedisChan {
-			err := HandleMessage(msg, arc.objMsgConn)
-			if err != nil {
-				log.Printf("NewConnection: Error sending message to redis:\n"+
-					"\tError: %s\n"+
-					"\tMessage: %s\n", err, msg)
-			}
+		for _ = range arc.MutateRedisChan {
+			panic("Mutate redisChan is not currently supported")
 		}
 	}()
 
@@ -98,9 +88,7 @@ func NewConnection(redisAddr string) *Synk {
 // Note that creating an object in this way prevents us from knowing if the
 // object creation succeeded. If we want that, it might be worth getting a
 func (synkConn *Synk) Create(obj Object) {
-	if obj.GetID() == "" {
-		obj.SetID(NewID().String())
-	}
+	obj.TagInit(obj.TypeKey())
 
 	// While we were creating this object struct, we may have used setters to
 	// set initial values. Resolve them here so the newly created object is
