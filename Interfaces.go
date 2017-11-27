@@ -1,5 +1,10 @@
 package synk
 
+// ObjectLoader is a type that can load objects from redis.
+type ObjectLoader interface {
+	LoadObject(typeKey string, bytes []byte)
+}
+
 // ContainerConstructor creates an Object containers for a given type key. This
 // allows client code to pass in custom logic for building containers based on
 // client types
@@ -46,8 +51,8 @@ type MongoObject interface {
 // initialized with a connection to a database and messaging service.
 //
 // When writing a Mutator it should not keep a connection to a database open.
-// For example if using:
 //
+// For example if using:
 // - redis/redigo - store a connection pool, get a connection from the pool
 // - mongodb/mgo  - store a session that is Copied() from another session
 type Mutator interface {
@@ -55,4 +60,5 @@ type Mutator interface {
 	Delete(obj MongoObject) error
 	Modify(obj MongoObject) error
 	Load(subKeys []string) ([]MongoObject, error)
+	Close() error
 }

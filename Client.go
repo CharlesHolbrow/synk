@@ -34,7 +34,7 @@ const (
 type Client struct {
 	custom        CustomClient
 	Synk          *Synk
-	MongoSynk     *MongoSynk
+	Mutator       Mutator
 	creator       ContainerConstructor // How objects from mongo will be created
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
@@ -59,10 +59,17 @@ func newClient(synkConn *Synk, wsConn *websocket.Conn, creator ContainerConstruc
 		return client, err
 	}
 
+	// This MongoSynk object will only be used for Getting Objects, so we can
+	// safely omit the telemetry collection
+	mSynk := &MongoSynk{
+		Coll:    synkConn.Mongo.Copy().DB("synk").C("objects"),
+		Creator: creator,
+	}
+
 	client = &Client{
-		Synk:          synkConn,
-		MongoSynk:     NewMongoSynk(), // BUG(charles): Mongo Refactor we should use Session.Copy() rather than creating for each client
-		creator:       creator,        // Does every instance of client really need it's own creator?
+		Synk:    synkConn,
+		Mutator: mSynk,
+
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},
@@ -78,11 +85,10 @@ func newClient(synkConn *Synk, wsConn *websocket.Conn, creator ContainerConstruc
 	}
 	client.waitGroup.Add(1)
 
-	// BUG(charles) Mongo refactor: Eventually this will not be needed OR it will replaced with NATS.io
-	client.MongoSynk.RConn = client.Synk.Pool.Get()
+	//
 	go func() {
 		client.waitGroup.Wait()
-		client.MongoSynk.RConn.Close()
+		client.Mutator.Close()
 	}()
 
 	go client.startMainLoop()
@@ -316,15 +322,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 			return err
 		}
 
-		// client.rConn is the connection used to create the subscription. We
-		// cannot use it to get the fragment. Grab another one from the pool.
-		// rConn := client.Synk.Pool.Get()
-		// objs, err := RequestObjects(rConn, msg.Add, client.builder)
-		// // return rConn to the pool as soon as we are done with it
-		// rConn.Close()
-		// The new way of getting objects!
-		coll := client.MongoSynk.session.DB("synk").C("objects")
-		objs := GetObjects(coll, msg.Add, client.creator)
+		objs, err := client.Mutator.Load(msg.Add)
 
 		if err != nil {
 			log.Printf("Client.updateSubscription: error geting Objects: %s\n", err)

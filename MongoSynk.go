@@ -18,22 +18,12 @@ func epanic(reason string, err error) {
 }
 
 // MongoSynk interfaces with the mongodb database
+//
+// Important: The Collection must be a unique session.
 type MongoSynk struct {
-	session *mgo.Session
-	db      *mgo.Database
+	Coll    *mgo.Collection
+	Creator ContainerConstructor
 	RConn   redis.Conn
-}
-
-// NewMongoSynk returns a new MongoSynk instance. Panic if dialing mongo fails.
-// BUG(charles): you are responsible for adding the Creator and RConn manually.
-func NewMongoSynk() *MongoSynk {
-	session, err := mgo.Dial("localhost")
-	epanic("Error connecting to mongo", err)
-
-	return &MongoSynk{
-		session: session,
-		db:      session.DB("synk"),
-	}
 }
 
 ////////////////////////////////////////////////////////////////
@@ -46,14 +36,14 @@ type typeOnly struct {
 	Type string `bson:"t"`
 }
 
-// GetObjects retrieves all objects from MongoDB that are in a given slice of
+// Load retrieves all objects from MongoDB that are in a given slice of
 // subscription Keys
-func GetObjects(coll *mgo.Collection, sKeys []string, creator ContainerConstructor) []MongoObject {
+func (ms *MongoSynk) Load(sKeys []string) ([]MongoObject, error) {
 	var rawResults []bson.Raw
 	var results []MongoObject
 	var err error
 
-	err = coll.Find(bson.M{"sub": bson.M{"$in": sKeys}}).All(&rawResults)
+	err = ms.Coll.Find(bson.M{"sub": bson.M{"$in": sKeys}}).All(&rawResults)
 	epanic("MongoSynk.GetObjects: error with .All mongo query", err)
 
 	results = make([]MongoObject, 0, len(rawResults))
@@ -65,7 +55,7 @@ func GetObjects(coll *mgo.Collection, sKeys []string, creator ContainerConstruct
 			log.Println("MongoSynk.GetObjects failed to get ID from raw mongo object:", err.Error())
 			continue
 		}
-		container := creator(temp.Type)
+		container := ms.Creator(temp.Type)
 		if container == nil {
 			log.Println("MongoSynk.GetObjects found no container for type:", temp.Type)
 			continue
@@ -77,7 +67,7 @@ func GetObjects(coll *mgo.Collection, sKeys []string, creator ContainerConstruct
 		}
 		results = append(results, container)
 	}
-	return results
+	return results, nil
 }
 
 ////////////////////////////////////////////////////////////////
@@ -87,7 +77,7 @@ func GetObjects(coll *mgo.Collection, sKeys []string, creator ContainerConstruct
 ////////////////////////////////////////////////////////////////
 
 // Create an object, and send an add message
-func (ms *MongoSynk) Create(obj MongoObject) {
+func (ms *MongoSynk) Create(obj MongoObject) error {
 	typeKey := obj.TypeKey()
 
 	// This will set the object's ID and Type, so that the correct value will
@@ -111,15 +101,16 @@ func (ms *MongoSynk) Create(obj MongoObject) {
 		Type:    typeKey,
 	}
 
-	err := ms.db.C("objects").Insert(obj)
+	err := ms.Coll.Insert(obj)
 	epanic("Failed to create new character in Mongodb", err)
 
 	err = ms.send(msg)
 	epanic("Trying to send addObjMsg", err)
+	return nil
 }
 
 // Modify a MongoObject, publishing a mod message once the mutation is complete.
-func (ms *MongoSynk) Modify(obj MongoObject) {
+func (ms *MongoSynk) Modify(obj MongoObject) error {
 	var err error
 
 	nsk := obj.GetSubKey()
@@ -143,11 +134,11 @@ func (ms *MongoSynk) Modify(obj MongoObject) {
 	}
 
 	if simple {
-		err = ms.db.C("objects").UpdateId(id, obj)
+		err = ms.Coll.UpdateId(id, obj)
 		epanic("Mongosynk.Modify failed to insert object", err)
 		err = ms.sendMod(msg)
 		epanic("MongoSynk.Modify failed to send message", err)
-		return
+		return nil
 	}
 
 	// The object changed chunks. We will need to update two redis sets, and
@@ -166,26 +157,42 @@ func (ms *MongoSynk) Modify(obj MongoObject) {
 
 	obj.TagSetSub(nsk)
 
-	err = ms.db.C("objects").Insert(obj)
+	err = ms.Coll.Insert(obj)
 	epanic("MongoSynk.Modify failed to insert on a non-simple Modify", err)
 	err = ms.sendMod(msg)
 	epanic("MongoSynk.Modify failed to send mod message on a non-simple Modify", err)
 	err = ms.sendAddFrom(amsg, psk)
 	epanic("MongoSynk.Modify failed to send add message on a non-simple Modify", err)
+
+	return nil
 }
 
 // Delete an object from the db, publishing a rem message on completion.
-func (ms *MongoSynk) Delete(obj MongoObject) {
+func (ms *MongoSynk) Delete(obj MongoObject) error {
 	msg := remMsg{
 		SKey: obj.GetPrevSubKey(),
 		ID:   obj.TagGetID(),
 		Type: obj.TypeKey(),
 	}
 
-	err := ms.db.C("objects").RemoveId(obj.TagGetID())
+	err := ms.Coll.RemoveId(obj.TagGetID())
 	epanic("MongoSynk.Delete failed to Remove an object", err)
 	err = ms.sendRem(msg)
 	epanic("MongoSynk.Delete failed to send rem message", err)
+
+	return nil
+}
+
+// Close returns connection resources to their pools
+func (ms *MongoSynk) Close() error {
+	var returnError error
+	if ms.Coll != nil {
+		ms.Coll.Database.Session.Close()
+	}
+	if ms.RConn != nil {
+		returnError = ms.RConn.Close()
+	}
+	return returnError
 }
 
 ////////////////////////////////////////////////////////////////

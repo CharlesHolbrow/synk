@@ -10,11 +10,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// ObjectLoader is a type that can load objects from redis.
-type ObjectLoader interface {
-	LoadObject(typeKey string, bytes []byte)
-}
-
 // RequestByteSlices from redis. Given a slice of subscription keys, get byte
 // slices for all keys. Results are returned as two parallel slices. If there
 // are no results, the slices will be of length zero.
