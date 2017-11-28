@@ -18,24 +18,21 @@ var upgrader = websocket.Upgrader{
 // Handler upgrades http requests to websockets. Each new request will have a
 // websocket connection. Made to be used with the http.Handle function.
 type Handler struct {
-	clientPool      *ClientPool
-	synkConn        *Synk
-	constructor     ContainerConstructor
-	constructClient CustomClientConstructor
+	clientPool *ClientPool
+	SynkConn   *Synk
+	Config     *Config
 }
 
 // NewHandler creates a WsHandler for use with http.Handle
-func NewHandler(synkConn *Synk, builder ContainerConstructor, constructor CustomClientConstructor) *Handler {
-
-	clientPool := newClientPool()
-	go clientPool.run()
+func NewHandler(config *Config) *Handler {
 
 	h := &Handler{
-		synkConn:        synkConn,
-		clientPool:      clientPool,
-		constructor:     builder,
-		constructClient: constructor,
+		Config:     config,
+		SynkConn:   NewSynk(config),
+		clientPool: newClientPool(),
 	}
+
+	go h.clientPool.run()
 
 	return h
 }
@@ -52,14 +49,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a new Client object
-	client, err := newClient(h.synkConn, wsConn, h.constructor)
+	client, err := newClient(h.Config, h.SynkConn, wsConn)
+
 	if err != nil {
 		log.Println("Failed to create Client:", err)
 		wsConn.Close()
 		return
 	}
 
-	client.custom = h.constructClient(client)
+	client.custom = h.Config.CustomClientConstructor(client)
 	client.custom.OnConnect(client)
 
 	// Now that the client was created successfully, It is the client's

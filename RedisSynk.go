@@ -30,6 +30,12 @@ type RedisSynk struct {
 	Constructor ContainerConstructor
 }
 
+// Clone this struct. Helps to satisfy synk.Mutator
+func (rs *RedisSynk) Clone() Mutator {
+	newRs := rs
+	return newRs
+}
+
 // Create an Object, and store it in Redis
 func (rs *RedisSynk) Create(obj Object) error {
 	conn := rs.Pool.Get()
@@ -57,7 +63,7 @@ func (rs *RedisSynk) Close() error {
 	return nil
 }
 
-// Load Rerieves Objects from Redis
+// Load Retrieves Objects from Redis
 func (rs *RedisSynk) Load(subKeys []string) ([]Object, error) {
 	conn := rs.Pool.Get()
 	defer conn.Close()

@@ -2,7 +2,6 @@ package synk
 
 import (
 	"log"
-	"time"
 
 	"github.com/garyburd/redigo/redis"
 	mgo "gopkg.in/mgo.v2"
@@ -16,43 +15,27 @@ type toRedis struct {
 
 // Synk wraps a redigo connection Pool
 type Synk struct {
-	addr string
-	Pool redis.Pool
-
-	// Messages sent to this channel will be be forwarded to redis via the
-	// 'toRedisConn' channel. This channel is exposed publically with Synk
-	// methods like RedisConnection.Publish
-	toRedisChan chan toRedis
-	toRedisConn redis.Conn
+	Pool   *redis.Pool
+	Mongo  *mgo.Session // I am migrating from Redis to MongoDB
+	Config *Config
 
 	// BUG(charles): MutateRedisChan is deprecated
 	MutateRedisChan chan Object
 
-	// I am migrating from Redis to MongoDB
-	Mongo *mgo.Session
+	// Messages sent to this channel will be be forwarded to redis via the
+	// 'toRedisConn' connection. This channel is exposed publicly with Synk
+	// methods like RedisConnection.Publish
+	toRedisChan chan toRedis
+	toRedisConn redis.Conn
 }
 
-// NewConnection builds a new AetherRedisConnection
-func NewConnection(redisAddr string) *Synk {
-	session, err := mgo.Dial("localhost")
-	if err != nil {
-		panic("Error Dialing mongodb: " + err.Error())
-	}
+// NewSynk builds a new AetherRedisConnection
+func NewSynk(config *Config) *Synk {
 
 	arc := &Synk{
-		addr: redisAddr,
-		Pool: redis.Pool{
-			MaxIdle:     100,
-			IdleTimeout: 240 * time.Second,
-			Dial: func() (redis.Conn, error) {
-				conn, err := redis.Dial("tcp", redisAddr, redis.DialConnectTimeout(8*time.Second))
-				if err != nil {
-					panic("Failed to connect to redis: " + err.Error())
-				}
-				return conn, err
-			},
-		},
-		Mongo: session,
+		Pool:   DialRedis(config.RedisAddr),
+		Mongo:  DialMongo(),
+		Config: config,
 	}
 
 	// Continuously pump messages from MutateRedisChan
@@ -63,18 +46,22 @@ func NewConnection(redisAddr string) *Synk {
 		}
 	}()
 
+	arc.toRedisChan = make(chan toRedis, 1000) // 1000 is arbitrary
+
 	// Continuously pump messages from toRedisChan to redis. Panic if there is
 	// an error sending to redis.
-	arc.toRedisChan = make(chan toRedis, 1000) // 1000 is arbitrary
-	arc.toRedisConn = arc.Pool.Get()
-
 	go func() {
+		arc.toRedisConn = arc.Pool.Get()
+		defer arc.toRedisConn.Close()
+
 		for val := range arc.toRedisChan {
 			if _, err := arc.toRedisConn.Do(val.commandName, val.args...); err != nil {
 				log.Printf("synk.Handler encountered an error trying to send %v: %s", val, err)
+				break
 			}
 		}
-		log.Panicln("synk: NewHandler: handler.toRedisChan closed!")
+
+		log.Panicln("synk: NewSynk: handler.toRedisChan closed!")
 	}()
 
 	return arc

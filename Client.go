@@ -48,27 +48,20 @@ type Client struct {
 	waitGroup     sync.WaitGroup
 }
 
-func newClient(synkConn *Synk, wsConn *websocket.Conn, creator ContainerConstructor) (*Client, error) {
+func newClient(config *Config, synkConn *Synk, wsConn *websocket.Conn) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 
 	// get a redis connection
-	rConn, err := redis.Dial("tcp", synkConn.addr)
+	rConn, err := redis.Dial("tcp", config.RedisAddr)
 	if err != nil {
 		log.Println("error connecting to redis:", err)
 		return client, err
 	}
 
-	// This MongoSynk object will only be used for Getting Objects, so we can
-	// safely omit the telemetry connection
-	mSynk := &MongoSynk{
-		Coll:    synkConn.Mongo.Copy().DB("synk").C("objects"),
-		Creator: creator,
-	}
-
 	client = &Client{
 		Synk:          synkConn,
-		Mutator:       mSynk,
+		Mutator:       config.Mutator.Clone(),
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},

@@ -21,9 +21,18 @@ func epanic(reason string, err error) {
 //
 // Important: The Collection must be a unique session.
 type MongoSynk struct {
-	Coll    *mgo.Collection
-	Creator ContainerConstructor
-	RConn   redis.Conn
+	Coll      *mgo.Collection
+	Creator   ContainerConstructor
+	RedisPool *redis.Pool
+}
+
+// Clone this MongySynk.
+func (ms *MongoSynk) Clone() Mutator {
+	return &MongoSynk{
+		Coll:      ms.Coll.Database.Session.Copy().DB(ms.Coll.Database.Name).C(ms.Coll.Name),
+		Creator:   ms.Creator,
+		RedisPool: ms.RedisPool,
+	}
 }
 
 ////////////////////////////////////////////////////////////////
@@ -194,9 +203,6 @@ func (ms *MongoSynk) Close() error {
 	if ms.Coll != nil {
 		ms.Coll.Database.Session.Close()
 	}
-	if ms.RConn != nil {
-		returnError = ms.RConn.Close()
-	}
 	return returnError
 }
 
@@ -211,31 +217,48 @@ func (ms *MongoSynk) send(msg addMsg) error {
 	if err != nil {
 		return err
 	}
-	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+	rConn := ms.RedisPool.Get()
+	defer rConn.Close()
+	_, err = rConn.Do("PUBLISH", msg.SKey, bytes)
 	return err
 }
+
 func (ms *MongoSynk) sendMod(msg modMsg) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+
+	rConn := ms.RedisPool.Get()
+	defer rConn.Close()
+
+	_, err = rConn.Do("PUBLISH", msg.SKey, bytes)
 	return err
 }
+
 func (ms *MongoSynk) sendAddFrom(msg addMsg, from string) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	_, err = ms.RConn.Do("PUBLISH", msg.SKey, []byte("from "+msg.PSKey+string(bytes)))
+
+	rConn := ms.RedisPool.Get()
+	defer rConn.Close()
+
+	_, err = rConn.Do("PUBLISH", msg.SKey, []byte("from "+msg.PSKey+string(bytes)))
 	return err
 }
+
 func (ms *MongoSynk) sendRem(msg remMsg) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	_, err = ms.RConn.Do("PUBLISH", msg.SKey, bytes)
+
+	rConn := ms.RedisPool.Get()
+	defer rConn.Close()
+
+	_, err = rConn.Do("PUBLISH", msg.SKey, bytes)
 	return err
 }
 
