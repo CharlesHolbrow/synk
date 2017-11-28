@@ -1,6 +1,6 @@
 package synk
 
-// ContainerConstructor creates an Object containers for a given type key. This
+// ContainerConstructor creates an Object container for a given type key. This
 // allows client code to pass in custom logic for building containers based on
 // client types
 type ContainerConstructor func(typeKey string) Object

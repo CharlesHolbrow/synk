@@ -102,10 +102,10 @@ func (ms *MongoSynk) Create(obj Object) error {
 	}
 
 	err := ms.Coll.Insert(obj)
-	epanic("Failed to create new character in Mongodb", err)
+	epanic("Failed to create new object in Mongodb", err)
 
 	err = ms.send(msg)
-	epanic("Trying to send addObjMsg", err)
+	epanic("Failed to send addMsg", err)
 	return nil
 }
 
@@ -158,7 +158,7 @@ func (ms *MongoSynk) Modify(obj Object) error {
 
 	obj.TagSetSub(nsk)
 
-	err = ms.Coll.Insert(obj)
+	err = ms.Coll.UpdateId(id, obj)
 	epanic("MongoSynk.Modify failed to insert on a non-simple Modify", err)
 	err = ms.sendMod(msg)
 	epanic("MongoSynk.Modify failed to send mod message on a non-simple Modify", err)
