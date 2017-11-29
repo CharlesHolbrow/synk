@@ -4,7 +4,7 @@ package synk
 // it is not a golang interface, it is the main interface for client code
 // that runs a synk server.
 type Config struct {
-	Mutator                 Mutator
+	Loader                  Loader
 	CustomClientConstructor CustomClientConstructor
 	RedisAddr               string
 }
@@ -12,6 +12,7 @@ type Config struct {
 // ContainerConstructor creates an Object container for a given type key. This
 // allows client code to pass in custom logic for building containers based on
 // client types
+//
 type ContainerConstructor func(typeKey string) Object
 
 // CustomClient provides an interface for creatnig custom behavior when
@@ -67,7 +68,7 @@ type Object interface {
 	TagSetSub(sKey string)
 }
 
-// Mutator represents a type that can get and modify objects.
+// Mutator represents a type that can get/modify objects.
 //
 // Typically a Mutator object will be constructed by client code, and
 // initialized with a connection to a database and messaging service.
@@ -77,11 +78,20 @@ type Object interface {
 // For example if using:
 // - redis/redigo - store a connection pool, get a connection from the pool
 // - mongodb/mgo  - store a session that is Copied() from another session
+//
+// The synk library provides the MongoMutator and RedisMutator types, both of
+// which satisfy Mutator. However -- Client code must provide a
+// ContainerConstructor so the Loaded Objects can be deserialized correctly.
 type Mutator interface {
 	Create(obj Object) error
 	Delete(obj Object) error
 	Modify(obj Object) error
 	Load(subKeys []string) ([]Object, error)
 	Close() error
-	Clone() Mutator
+}
+
+type Loader interface {
+	Load(subKeys []string) ([]Object, error)
+	Clone() Loader
+	Close() error
 }

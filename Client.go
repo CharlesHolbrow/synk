@@ -34,7 +34,7 @@ const (
 type Client struct {
 	custom        CustomClient
 	Synk          *Synk
-	Mutator       Mutator
+	Loader        Loader
 	creator       ContainerConstructor // How objects from mongo will be created
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
@@ -61,7 +61,7 @@ func newClient(config *Config, synkConn *Synk, wsConn *websocket.Conn) (*Client,
 
 	client = &Client{
 		Synk:          synkConn,
-		Mutator:       config.Mutator.Clone(),
+		Loader:        config.Loader.Clone(),
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},
@@ -80,7 +80,7 @@ func newClient(config *Config, synkConn *Synk, wsConn *websocket.Conn) (*Client,
 	//
 	go func() {
 		client.waitGroup.Wait()
-		client.Mutator.Close()
+		client.Loader.Close()
 	}()
 
 	go client.startMainLoop()
@@ -314,7 +314,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 			return err
 		}
 
-		objs, err := client.Mutator.Load(msg.Add)
+		objs, err := client.Loader.Load(msg.Add)
 
 		if err != nil {
 			log.Printf("Client.updateSubscription: error geting Objects: %s\n", err)

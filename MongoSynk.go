@@ -27,7 +27,7 @@ type MongoSynk struct {
 }
 
 // Clone this MongySynk.
-func (ms *MongoSynk) Clone() Mutator {
+func (ms *MongoSynk) Clone() Loader {
 	return &MongoSynk{
 		Coll:      ms.Coll.Database.Session.Copy().DB(ms.Coll.Database.Name).C(ms.Coll.Name),
 		Creator:   ms.Creator,
