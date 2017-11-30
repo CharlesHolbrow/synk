@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/CharlesHolbrow/synk"
-	"github.com/garyburd/redigo/redis"
-	mgo "gopkg.in/mgo.v2"
 )
 
 func creator(typeKey string) synk.Object {
@@ -27,15 +25,13 @@ func epanic(message string, err error) {
 }
 
 func TestHuman_GetSubKey(t *testing.T) {
-	session, err := mgo.Dial("localhost")
-	epanic("failed to dial mongodb:", err)
-	rConn, err := redis.Dial("tcp", ":6379")
-	epanic("failed to dial redis:", err)
+	session := synk.DialMongo()
+	pool := synk.DialRedis()
 
 	ms := synk.MongoSynk{
-		Coll:    session.DB("synk").C("objects"),
-		Creator: creator,
-		RConn:   rConn,
+		Coll:      session.DB("synk").C("objects"),
+		Creator:   creator,
+		RedisPool: pool,
 	}
 
 	h := &Human{}
@@ -53,6 +49,8 @@ func TestHuman_GetSubKey(t *testing.T) {
 	var o2 synk.Object
 
 	objects, err := ms.Load([]string{h.GetSubKey()})
+	epanic("Error loading synk Objects:", err)
+
 	fmt.Println("Length of results:", len(objects))
 
 	found := false

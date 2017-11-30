@@ -206,6 +206,28 @@ func (ms *MongoSynk) Close() error {
 	return returnError
 }
 
+// Publish a message. If the message is a []byte, publish it directly. Otherwise
+// Marshal it to JSON.
+func (ms *MongoSynk) Publish(channel string, msg interface{}) error {
+	conn := ms.RedisPool.Get()
+	defer conn.Close()
+
+	var bytes []byte
+	var err error
+
+	if msg, ok := msg.([]byte); ok {
+		bytes = msg
+	} else {
+		bytes, err = json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = conn.Do("PUBLISH", channel, bytes)
+	return err
+}
+
 ////////////////////////////////////////////////////////////////
 //
 // Stubs for sending messages to clients

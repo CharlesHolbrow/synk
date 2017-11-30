@@ -13,8 +13,8 @@ type toRedis struct {
 	args        []interface{}
 }
 
-// Synk wraps a redigo connection Pool
-type Synk struct {
+// Pipe wraps a redigo connection Pool
+type Pipe struct {
 	Pool   *redis.Pool
 	Mongo  *mgo.Session // I am migrating from Redis to MongoDB
 	Config *Config
@@ -30,10 +30,10 @@ type Synk struct {
 }
 
 // NewSynk builds a new AetherRedisConnection
-func NewSynk(config *Config) *Synk {
+func NewSynk(config *Config) *Pipe {
 
-	arc := &Synk{
-		Pool:   DialRedis(config.RedisAddr),
+	arc := &Pipe{
+		Pool:   DialRedis(),
 		Mongo:  DialMongo(),
 		Config: config,
 	}
@@ -74,7 +74,7 @@ func NewSynk(config *Config) *Synk {
 //
 // Note that creating an object in this way prevents us from knowing if the
 // object creation succeeded. If we want that, it might be worth getting a
-func (synkConn *Synk) Create(obj Object) {
+func (synkConn *Pipe) Create(obj Object) {
 	obj.TagInit(obj.TypeKey())
 
 	// While we were creating this object struct, we may have used setters to
@@ -102,7 +102,7 @@ func (synkConn *Synk) Create(obj Object) {
 // still think that the character is in the previous subscription key (in the
 // event that it changed subscription keys before being passed here). Only synk
 // code should ever call an objects .Resolve() method.
-func (synkConn *Synk) Delete(obj Object) {
+func (synkConn *Pipe) Delete(obj Object) {
 	// I don't think we need to copy the object, because it should have already
 	// deleted from other places. This is not thoroughly tested, so I'm going to
 	// do it anyway for now.
@@ -114,7 +114,7 @@ func (synkConn *Synk) Delete(obj Object) {
 }
 
 // Modify an object in redis.
-func (synkConn *Synk) Modify(obj Object) {
+func (synkConn *Pipe) Modify(obj Object) {
 	if obj.Changed() {
 		synkConn.MutateRedisChan <- modObj{Object: obj.Copy()}
 		// BUG(charles): see notes in Create about Resolving() immediately
@@ -123,6 +123,6 @@ func (synkConn *Synk) Modify(obj Object) {
 }
 
 // Publish updates sends a message to be processed by redis.
-func (synkConn *Synk) Publish(args ...interface{}) {
+func (synkConn *Pipe) Publish(args ...interface{}) {
 	synkConn.toRedisChan <- toRedis{commandName: "PUBLISH", args: args}
 }

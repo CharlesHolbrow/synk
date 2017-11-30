@@ -32,10 +32,9 @@ const (
 // websocket and redis connections.
 // The client does not know which pools it is a part of.
 type Client struct {
-	custom        CustomClient
-	Synk          *Synk
+	Node          *Node
 	Loader        Loader
-	creator       ContainerConstructor // How objects from mongo will be created
+	custom        CustomClient
 	wsConn        *websocket.Conn
 	rConn         redis.Conn       // This is the connection used by rSubscription
 	rSubscription redis.PubSubConn // This uses rConn as the underlying conn
@@ -48,20 +47,20 @@ type Client struct {
 	waitGroup     sync.WaitGroup
 }
 
-func newClient(config *Config, synkConn *Synk, wsConn *websocket.Conn) (*Client, error) {
+func newClient(node *Node, wsConn *websocket.Conn) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 
 	// get a redis connection
-	rConn, err := redis.Dial("tcp", config.RedisAddr)
+	rConn, err := redis.Dial("tcp", RedisAddr)
 	if err != nil {
 		log.Println("error connecting to redis:", err)
 		return client, err
 	}
 
 	client = &Client{
-		Synk:          synkConn,
-		Loader:        config.Loader.Clone(),
+		Node:          node,
+		Loader:        node.CreateLoader(),
 		wsConn:        wsConn,
 		rConn:         rConn,
 		rSubscription: redis.PubSubConn{Conn: rConn},
@@ -86,6 +85,9 @@ func newClient(config *Config, synkConn *Synk, wsConn *websocket.Conn) (*Client,
 	go client.startMainLoop()
 	go client.startReadingFromRedis()
 	go client.startReadingFromWebSocket()
+
+	client.custom = node.NewClient(client)
+	client.custom.OnConnect(client)
 
 	log.Println("synk.newClient created:", client.ID)
 	return client, nil

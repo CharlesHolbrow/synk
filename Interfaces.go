@@ -1,12 +1,47 @@
 package synk
 
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+// RedisAddr is the address that the synk library uses. You can specify a custom
+// address by setting the SYNK_REDIS_ADDR environment variable.
+//
+// EX:
+// SYNK_REDIS_ADDR=127.0.0.2
+// SYNK_REDIS_ADDR=127.0.0.3:5555
+//
+// If no port is specified ":6379" is used
+// If no host is specified redis's default (127.0.0.1) is used
+var RedisAddr = os.Getenv("SYNK_REDIS_ADDR")
+
+// MongoAddr is the address that the synk library uses by. Defaults to localhost
+// Check mgo docs to see how ports are specified
+var MongoAddr = os.Getenv("SYNK_MONGO_ADDR")
+
+// Initialize some Defaults
+func init() {
+	// redigo accepts just a host number, which causes it to bind to 127.0.0.1
+	if strings.Index(RedisAddr, ":") == -1 {
+		RedisAddr = RedisAddr + ":6379"
+	}
+
+	if MongoAddr == "" {
+		MongoAddr = "localhost"
+	}
+
+	fmt.Println("Redis Address:", RedisAddr)
+	fmt.Println("Mongo Address:", MongoAddr)
+}
+
 // Config stores all the customization options for running a synk server. While
 // it is not a golang interface, it is the main interface for client code
 // that runs a synk server.
 type Config struct {
 	Loader                  Loader
-	CustomClientConstructor CustomClientConstructor
-	RedisAddr               string
+	CustomClientConstructor ClientConstructor
 }
 
 // ContainerConstructor creates an Object container for a given type key. This
@@ -24,8 +59,9 @@ type CustomClient interface {
 	OnSubscribe(client *Client, subKeys []string, objs []Object)
 }
 
-// A CustomClientConstructor must be supplied when implementing custom handlers.
-// The supplied function will create the custom message handler when clients connect
+// A ClientConstructor must be supplied when implementing custom handlers.
+// The supplied function will create the custom message handler when clients
+// connect.
 //
 // If you are writing a sync server, you will probably want to write custom
 // handlers for messages received from clients. You will need to implement
@@ -35,7 +71,7 @@ type CustomClient interface {
 // and passed a Client object. The constructor function is expected to return
 // an instance of your CustomClient that provides the OnConnect and OnMessage
 // callbacks.
-type CustomClientConstructor func(client *Client) CustomClient
+type ClientConstructor func(client *Client) CustomClient
 
 // There are two ways to modify Objects.
 //
