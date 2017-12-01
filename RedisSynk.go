@@ -30,12 +30,6 @@ type RedisSynk struct {
 	Constructor ContainerConstructor
 }
 
-// Clone this struct. Helps to satisfy synk.Mutator
-func (rs *RedisSynk) Clone() Mutator {
-	newRs := rs
-	return newRs
-}
-
 // Create an Object, and store it in Redis
 func (rs *RedisSynk) Create(obj Object) error {
 	conn := rs.Pool.Get()
@@ -69,6 +63,28 @@ func (rs *RedisSynk) Load(subKeys []string) ([]Object, error) {
 	defer conn.Close()
 
 	return RedisRequestObjects(conn, subKeys, rs.Constructor)
+}
+
+// Publish a message. If the message is a []byte, publish it directly. Otherwise
+// Marshal it to JSON.
+func (rs *RedisSynk) Publish(channel string, msg interface{}) error {
+	conn := rs.Pool.Get()
+	defer conn.Close()
+
+	var bytes []byte
+	var err error
+
+	if msg, ok := msg.([]byte); ok {
+		bytes = msg
+	} else {
+		bytes, err = json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = conn.Do("PUBLISH", channel, bytes)
+	return err
 }
 
 /***************************************************************

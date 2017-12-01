@@ -128,6 +128,6 @@ type Mutator interface {
 
 type Loader interface {
 	Load(subKeys []string) ([]Object, error)
-	Clone() Loader
 	Close() error
+	Publish(string, interface{}) error
 }
