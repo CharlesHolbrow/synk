@@ -36,12 +36,58 @@ func init() {
 	fmt.Println("Mongo Address:", MongoAddr)
 }
 
-// Config stores all the customization options for running a synk server. While
-// it is not a golang interface, it is the main interface for client code
-// that runs a synk server.
-type Config struct {
-	Loader                  Loader
-	CustomClientConstructor ClientConstructor
+// There are two ways to modify Objects.
+//
+// 1. MongoSynk's Create/Delete/Modify functions. Use these when you need
+//    confirmation
+//
+// !!!!IMPORTANT!!!!! - as of November 2017 the method below is deprecated
+//
+// 2. Pipe's Create/Delete/Modify functions. I think these
+//    should work fine for most things: if the write fails, we need to re-get
+//    the collection we are working on, and re-start the simulation. Note that
+//    this is how we handle the client connection too -- If the connection is
+//    broken we just re-get the collection and continue where we left off.
+
+// Object is the interface for anything that will be saved in redis with diffs
+// that will be pushed to clients. The methods are a sub-set of the Character
+// interface methods.
+type Object interface {
+	// This method must be provided by the user
+	TypeKey() string
+
+	// GetSubKey and GetPrevSubKey can be provided by ther user, or they can be
+	// generated if the struct yas a SubKey string member. When providing them
+	// manually, we should be carefull that they depend on generated members,
+	// so that the .Changed method return the correct value.
+	GetSubKey() string
+	GetPrevSubKey() string
+
+	// These methods will always be generated
+	State() interface{}
+	Resolve() interface{}
+	Changed() bool
+	Init() // Makes the next call to .Resolve() return the full object state
+	Copy() Object
+
+	// Below are methods that are provided by synk.Tag
+	Version() uint
+	TagInit(typeKey string)
+	TagGetID() string
+	TagSetSub(sKey string)
+}
+
+// Initializer is any synkObject needs custom method called when it is created.
+// These Objects will have their OnCreate method called before they are inserted
+// into the DB for the first time.
+//
+// The Initialize method can use Getters/Setters, or it can update the object
+// directly.
+//
+// Be careful not to confuse the Initializer interface with synk.Object's Init()
+// method.
+type Initializer interface {
+	OnCreate()
 }
 
 // ContainerConstructor creates an Object container for a given type key. This
@@ -73,37 +119,6 @@ type CustomClient interface {
 // callbacks.
 type ClientConstructor func(client *Client) CustomClient
 
-// There are two ways to modify Objects.
-//
-// 1. The top level Create/Delete/Modify functions. Use these when you need
-//    confirmation
-//
-// !!!!IMPORTANT!!!!! - as of November 2017 the method below is deprecated
-//
-// 2. The SynkRedisConnection's Create/Delete/Modify functions. I think these
-//    should work fine for most things: if the write fails, we need to re-get
-//    the collection we are working on, and re-start the simulation. Note that
-//    this is how we handle the client connection too -- If the connection is
-//    broken we just re-get the collection and continue where we left off.
-
-// Object is the interface for anything that will be saved in redis with diffs
-// that will be pushed to clients. The methods are a sub-set of the Character
-// interface methods.
-type Object interface {
-	State() interface{}
-	Resolve() interface{}
-	Changed() bool
-	Init()
-	Copy() Object
-	TypeKey() string // We still use this
-	GetSubKey() string
-	GetPrevSubKey() string
-	Version() uint
-	TagInit(typeKey string)
-	TagGetID() string
-	TagSetSub(sKey string)
-}
-
 // Mutator represents a type that can get/modify objects.
 //
 // Typically a Mutator object will be constructed by client code, and
@@ -126,6 +141,8 @@ type Mutator interface {
 	Close() error
 }
 
+// A Loader is any object that can load from our database. AND publish messages
+// that may be received by nodes.
 type Loader interface {
 	Load(subKeys []string) ([]Object, error)
 	Close() error

@@ -199,6 +199,23 @@ func redisNewObject(obj Object, rConn redis.Conn) error {
 	typeKey := obj.TypeKey()
 	redisKey := redisKey(obj)
 
+	// This will set the object's ID and Type, so that the correct value will
+	// be stored in mongodb.
+	obj.TagInit(typeKey)
+
+	if initer, ok := obj.(Initializer); ok {
+		initer.OnCreate()
+	}
+
+	// We may have used setters when building the object (this is recommended).
+	// Resolve the object to apply any pending changes.
+	obj.Resolve()
+
+	// Make sure to add the subscription to the Tag so that it will be correct
+	// in mongodb.
+	subscription := obj.GetSubKey()
+	obj.TagSetSub(subscription)
+
 	msg := addMsg{
 		State:   obj.State(),
 		ID:      obj.TagGetID(),

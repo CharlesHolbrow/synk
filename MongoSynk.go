@@ -84,6 +84,10 @@ func (ms *MongoSynk) Create(obj Object) error {
 	// be stored in mongodb.
 	obj.TagInit(typeKey)
 
+	if initer, ok := obj.(Initializer); ok {
+		initer.OnCreate()
+	}
+
 	// We may have used setters when building the object (this is recommended).
 	// Resolve the object to apply any pending changes.
 	obj.Resolve()

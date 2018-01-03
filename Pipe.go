@@ -7,17 +7,13 @@ import (
 	mgo "gopkg.in/mgo.v2"
 )
 
-// Helper struct used by toRedisChan
-type toRedis struct {
-	commandName string
-	args        []interface{}
-}
-
-// Pipe wraps a redigo connection Pool
+// Pipe offers a way to pump messages to redis/clients without waiting for
+// confirmation that the write succeeded.
+//
+// It is currently not tested or supported.
 type Pipe struct {
-	Pool   *redis.Pool
-	Mongo  *mgo.Session // I am migrating from Redis to MongoDB
-	Config *Config
+	Pool  *redis.Pool
+	Mongo *mgo.Session // I am migrating from Redis to MongoDB
 
 	// BUG(charles): MutateRedisChan is deprecated
 	MutateRedisChan chan Object
@@ -30,12 +26,11 @@ type Pipe struct {
 }
 
 // NewSynk builds a new AetherRedisConnection
-func NewSynk(config *Config) *Pipe {
+func NewSynk() *Pipe {
 
 	arc := &Pipe{
-		Pool:   DialRedis(),
-		Mongo:  DialMongo(),
-		Config: config,
+		Pool:  DialRedis(),
+		Mongo: DialMongo(),
 	}
 
 	// Continuously pump messages from MutateRedisChan
@@ -125,4 +120,10 @@ func (synkConn *Pipe) Modify(obj Object) {
 // Publish updates sends a message to be processed by redis.
 func (synkConn *Pipe) Publish(args ...interface{}) {
 	synkConn.toRedisChan <- toRedis{commandName: "PUBLISH", args: args}
+}
+
+// Helper struct used by toRedisChan
+type toRedis struct {
+	commandName string
+	args        []interface{}
 }
