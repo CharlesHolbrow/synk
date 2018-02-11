@@ -1,7 +1,7 @@
 package synk
 
 // Tag includes fields that are required for a synk Objects. It is
-// intended to be included in a type object as an anonymous member.
+// intended to be included in object types as an anonymous member.
 //
 // These fields are used by the synk pipeline to make sure that data sent to
 // mongodb has an ID and Subscription. The data in Tag members may be
