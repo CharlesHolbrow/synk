@@ -1,6 +1,7 @@
 package synk
 
 import (
+	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -17,16 +18,25 @@ type Node struct {
 	redisPool    *redis.Pool
 	NewContainer ContainerConstructor
 	NewClient    ClientConstructor
+	mutex        sync.RWMutex
 }
 
 // Create network connections. Panic if any connection fails.
 func (node *Node) dial() {
+	node.mutex.RLock()
+	if node.mongoSession != nil && node.redisPool != nil {
+		node.mutex.RUnlock()
+		return
+	}
+	node.mutex.RUnlock()
+	node.mutex.Lock()
 	if node.mongoSession == nil {
 		node.mongoSession = DialMongo()
 	}
 	if node.redisPool == nil {
 		node.redisPool = DialRedis()
 	}
+	node.mutex.Unlock()
 }
 
 // CreateMutator returns a ready to use Mutator. The Mutator must be .Closed()
