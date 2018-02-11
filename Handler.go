@@ -19,14 +19,14 @@ var upgrader = websocket.Upgrader{
 // websocket connection. Made to be used with the http.Handle function.
 type Handler struct {
 	clientPool *ClientPool
-	Synk       *Node
+	Node       *Node
 }
 
 // NewHandler creates a WsHandler for use with http.Handle
-func NewHandler(synk *Node) *Handler {
+func NewHandler(node *Node) *Handler {
 
 	h := &Handler{
-		Synk:       synk,
+		Node:       node,
 		clientPool: newClientPool(),
 	}
 
@@ -47,7 +47,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a new Client object
-	client, err := newClient(h.Synk, wsConn)
+	client, err := newClient(h.Node, wsConn)
 
 	if err != nil {
 		log.Println("Failed to create Client:", err)
