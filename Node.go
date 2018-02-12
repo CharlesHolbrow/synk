@@ -1,42 +1,33 @@
 package synk
 
 import (
-	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 	"gopkg.in/mgo.v2"
 )
 
-// Node is the main interface for interacting with a synk server.
+// Node is the main interface for interacting with a synk server. Every golang
+// application in a sync project should create one Node instance.
 //
-// It is designed to be intialized passively without a constructor. The methods
-// will panic if the recieving struct is not populated with the required public
-// members.
+// Exported methods must be safe for concurrent calls.
 type Node struct {
 	mongoSession *mgo.Session
 	redisPool    *redis.Pool
 	NewContainer ContainerConstructor
 	NewClient    ClientConstructor
-	mutex        sync.RWMutex
 }
 
-// Create network connections. Panic if any connection fails.
-func (node *Node) dial() {
-	node.mutex.RLock()
-	if node.mongoSession != nil && node.redisPool != nil {
-		node.mutex.RUnlock()
-		return
+// NewNode creates new a *Node with the default connections.
+//
+// Objects created with NewNode are not ready for use. The NewContainer and
+// NewClient members must be set or the CreateMutator/CreateLoader methods will
+// fail.
+func NewNode() *Node {
+	return &Node{
+		mongoSession: DialMongo(),
+		redisPool:    DialRedisPool(),
 	}
-	node.mutex.RUnlock()
-	node.mutex.Lock()
-	if node.mongoSession == nil {
-		node.mongoSession = DialMongo()
-	}
-	if node.redisPool == nil {
-		node.redisPool = DialRedisPool()
-	}
-	node.mutex.Unlock()
 }
 
 // CreateMutator returns a ready to use Mutator. The Mutator must be .Closed()
@@ -49,7 +40,6 @@ func (node *Node) CreateMutator() Mutator {
 	if node.NewContainer == nil {
 		panic("Tried to get a mutator, but not NewContainer is not set")
 	}
-	node.dial()
 
 	return &MongoSynk{
 		Creator:   node.NewContainer,
@@ -66,7 +56,6 @@ func (node *Node) CreateLoader() Loader {
 	if node.NewContainer == nil {
 		panic("Tried to get a Loader, but not NewContainer is not set")
 	}
-	node.dial()
 
 	return &MongoSynk{
 		Creator:   node.NewContainer,
@@ -79,7 +68,9 @@ func (node *Node) CreateLoader() Loader {
 
 // DialRedisPool creates a redigo connection pool with the default synk
 // configuration. The synk package level RedisAddr which is adapted from the
-// SYNK_REDIS_ADDR environment variable is used to connect
+// SYNK_REDIS_ADDR environment variable is used to connect.
+//
+// Panic on connection error
 func DialRedisPool() *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
@@ -98,7 +89,7 @@ func DialRedisPool() *redis.Pool {
 // synk package level RedisAddr which is adapted from the SYNK_REDIS_ADDR
 // environment variable is used to connect.
 //
-// Panic on connection error
+// Panic on connection error.
 func DialRedis() redis.Conn {
 	conn, err := redis.Dial("tcp", RedisAddr, redis.DialConnectTimeout(8*time.Second))
 	if err != nil {
