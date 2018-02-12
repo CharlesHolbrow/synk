@@ -29,7 +29,7 @@ type Pipe struct {
 func NewSynk() *Pipe {
 
 	arc := &Pipe{
-		Pool:  DialRedis(),
+		Pool:  DialRedisPool(),
 		Mongo: DialMongo(),
 	}
 

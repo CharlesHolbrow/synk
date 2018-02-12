@@ -26,7 +26,7 @@ func epanic(message string, err error) {
 
 func TestHuman_GetSubKey(t *testing.T) {
 	session := synk.DialMongo()
-	pool := synk.DialRedis()
+	pool := synk.DialRedisPool()
 
 	ms := synk.MongoSynk{
 		Coll:      session.DB("synk").C("objects"),

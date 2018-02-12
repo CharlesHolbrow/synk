@@ -34,7 +34,7 @@ func (node *Node) dial() {
 		node.mongoSession = DialMongo()
 	}
 	if node.redisPool == nil {
-		node.redisPool = DialRedis()
+		node.redisPool = DialRedisPool()
 	}
 	node.mutex.Unlock()
 }
@@ -77,10 +77,10 @@ func (node *Node) CreateLoader() Loader {
 
 // Helpers
 
-// DialRedis creates a redigo connection pool with the default synk
+// DialRedisPool creates a redigo connection pool with the default synk
 // configuration. The synk package level RedisAddr which is adapted from the
 // SYNK_REDIS_ADDR environment variable is used to connect
-func DialRedis() *redis.Pool {
+func DialRedisPool() *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		IdleTimeout: 240 * time.Second,
@@ -92,6 +92,19 @@ func DialRedis() *redis.Pool {
 			return conn, err
 		},
 	}
+}
+
+// DialRedis gets a redis connection with the default synk configuration. The
+// synk package level RedisAddr which is adapted from the SYNK_REDIS_ADDR
+// environment variable is used to connect.
+//
+// Panic on connection error
+func DialRedis() redis.Conn {
+	conn, err := redis.Dial("tcp", RedisAddr, redis.DialConnectTimeout(8*time.Second))
+	if err != nil {
+		panic("Failed to connect to redis: " + err.Error())
+	}
+	return conn
 }
 
 // DialMongo creates the first MongoSession. Further sessions should be created
