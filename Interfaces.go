@@ -130,9 +130,9 @@ type ClientConstructor func(client *Client) CustomClient
 // - redis/redigo - store a connection pool, get a connection from the pool
 // - mongodb/mgo  - store a session that is Copied() from another session
 //
-// The synk library provides the MongoMutator and RedisMutator types, both of
-// which satisfy Mutator. However -- Client code must provide a
-// ContainerConstructor so the Loaded Objects can be deserialized correctly.
+// The synk library provides the MongoSynk and RedisSynk types, both of which
+// satisfy Mutator. However -- Client code must provide a ContainerConstructor
+// so the Loaded Objects can be deserialized correctly.
 type Mutator interface {
 	Create(obj Object) error
 	Delete(obj Object) error
