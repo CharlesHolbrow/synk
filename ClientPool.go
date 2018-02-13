@@ -24,11 +24,11 @@ func (pool *ClientPool) run() {
 	for {
 		select {
 		case client := <-pool.add:
-			pool.all[client.ID] = client
+			pool.all[client.id] = client
 		case client := <-pool.remove:
-			if _, ok := pool.all[client.ID]; ok {
+			if _, ok := pool.all[client.id]; ok {
 				close(client.toWebSocket)
-				delete(pool.all, client.ID)
+				delete(pool.all, client.id)
 			}
 		case message := <-pool.broadcast:
 			for _, client := range pool.all {

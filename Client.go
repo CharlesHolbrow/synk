@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
 	"github.com/gorilla/websocket"
 )
 
@@ -36,12 +35,9 @@ type Client struct {
 	Loader        Loader
 	custom        CustomClient
 	wsConn        *websocket.Conn
-	rConn         redis.Conn       // This is the connection used by rSubscription
-	rSubscription redis.PubSubConn // This uses rConn as the underlying conn
 	fromWebSocket chan interface{}
 	toWebSocket   chan []byte // safe to send messages here concurrently
-	ID            ID
-	quit          chan bool
+	id            ID
 	subscriptions map[string]bool
 	closeOnce     sync.Once
 	waitGroup     sync.WaitGroup
@@ -51,27 +47,13 @@ func newClient(node *Node, wsConn *websocket.Conn) (*Client, error) {
 	var client *Client
 	log.Println("Creating New Client...")
 
-	// get a redis connection
-	rConn, err := redis.Dial("tcp", RedisAddr)
-	if err != nil {
-		log.Println("error connecting to redis:", err)
-		return client, err
-	}
-
 	client = &Client{
 		Node:          node,
 		Loader:        node.CreateLoader(),
 		wsConn:        wsConn,
-		rConn:         rConn,
-		rSubscription: redis.PubSubConn{Conn: rConn},
 		fromWebSocket: make(chan interface{}, clientBufferLength),
 		toWebSocket:   make(chan []byte, clientBufferLength),
-		ID:            NewID(),
-		// quit is buffered, because it should never block. Be careful when
-		// quiting from outside the Client methods. We want to be sure to remove
-		// all references to the client when it terminates so we can be
-		// confident that it will be garbage collected.
-		quit:          make(chan bool, 8),
+		id:            NewID(),
 		subscriptions: make(map[string]bool),
 	}
 	client.waitGroup.Add(1)
@@ -79,56 +61,36 @@ func newClient(node *Node, wsConn *websocket.Conn) (*Client, error) {
 	//
 	go func() {
 		client.waitGroup.Wait()
+		fmt.Println("Graceful shutdown:", client.ID())
 		client.Loader.Close()
 	}()
 
 	go client.startMainLoop()
-	go client.startReadingFromRedis()
 	go client.startReadingFromWebSocket()
 
 	client.custom = node.NewClient(client)
 	client.custom.OnConnect(client)
 
-	log.Println("synk.newClient created:", client.ID)
+	log.Println("synk.newClient created:", client.id)
 	return client, nil
 }
 
-// Input: client.rSubscription
-// Output: client.writeToWebSocket chan
-//
-// This is not the only goroutine that will send to writeToWebSocket, so it
-// must not close writeToWebSocket when it encounters an error.
-//
-// Any one of the following events causes termination:
-// - rPubSub (or rConn) is closed (Handler may close the rConn)
-// - There is an error reading from rPubSub (triggers send on .quit channel)
-func (client *Client) startReadingFromRedis() {
-	defer client.Close()
-	defer log.Println("Close startReadingFromRedis", client.ID)
-	for {
-		switch v := client.rSubscription.Receive().(type) {
-		case redis.Message:
-			client.handleByteSliceFromRedis(v.Data)
-		case redis.PMessage:
-			client.toWebSocket <- v.Data // v.Channel, v.Pattern, v.Data
-		case redis.Subscription:
-			// Redis is confirming our subscription v.Channel, v.Kind, v.Count
-		case error:
-			log.Println("Client.startReadingFromRedis: Subscription receive error:", v)
-			// It Appears that the only way to exit out of this thread from code
-			// is to .Close() the PubSubConn. However, I believe this case will
-			// also execute if there is an error with with the Connection.
-			// We do not know which one of these two things happened, but either
-			// way we want to signal that we want to close this client.
-			//
-			// The main client goroutine (not this one) will Close the
-			// PubSubConn when it exits.
-			return
-		}
-	}
+// ID returns the client's id as a string
+func (client *Client) ID() string {
+	return client.id.String()
 }
 
-func (client *Client) handleByteSliceFromRedis(bytes []byte) {
+// Receive handles byteSlices from redis.
+//
+// It will be called by pubsub.RedisAgents when we receive a value from redis.
+//
+// Input: client.Node.redisAgents
+// Output: client.toWebSocket channel
+//
+// While this function is safe for concurrent calls, we may still want to be
+// careful with where it gets called from, because the order synk messages
+// arrive in is important.
+func (client *Client) Receive(key string, bytes []byte) (err error) {
 	s := string(bytes)
 	split := strings.Index(s, "{")
 	if split == 0 {
@@ -136,7 +98,7 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 		return
 	}
 	if split == -1 {
-		fmt.Printf("synk.Client: Error with bytes from redis: %s\n", bytes)
+		fmt.Printf("synk.Client.Receive: Error with bytes from redis: %s\n", bytes)
 		return
 	}
 
@@ -159,6 +121,7 @@ func (client *Client) handleByteSliceFromRedis(bytes []byte) {
 		log.Println("handleByteSliceFromRedis: unrecognized header", header)
 		client.toWebSocket <- bytes
 	}
+	return
 }
 
 // The main client loop is responsible for writing to wsConn and the client's
@@ -187,7 +150,7 @@ func (client *Client) startMainLoop() {
 
 	defer ticker.Stop()
 	defer client.Close()
-	defer log.Println("Close startWritingToWebSocket", client.ID)
+	defer log.Println("Close startMainLoop", client.id)
 
 	for {
 		select {
@@ -210,13 +173,18 @@ func (client *Client) startMainLoop() {
 			}
 		// Above this should be logic for writing to the websocket
 		// Below should be other stuff
-		case message := <-client.fromWebSocket:
+		case message, ok := <-client.fromWebSocket:
+			if !ok {
+				// ws connection is broken, but we are still receiving messages
+				// from redis.
+				return
+			}
 			// Please note the genius of handling subscription methods here.
 			// This allows us to start subscribing before we send the requested
-			// chunks. However setTile methods that arrive after we send the
+			// chunks. However modObj messages that arrive after we send the
 			// chunks to the client, because they will be qued in this goroutine.
 			//
-			// This gaurantees that the client will not miss setTile methods
+			// This gaurantees that the client will not miss modObj messages
 			// between the time that it receives it's first setChunk and and
 			// when the subscription takes effect.
 			err := client.handleMessage(message)
@@ -224,38 +192,52 @@ func (client *Client) startMainLoop() {
 				log.Println("Client.writeToWebSocket: Error handling message from client:", err)
 				// Should this quit/return?
 			}
-		case <-client.quit:
-			// Someone (possibly the redis goroutine) asked us to quit.
-			// Acquiesce.
-			return
 		}
 	}
 }
 
-// startReadingFromWebSocket pumps messages from the ws to the
-// Client.messageChannel.
+// startReadingFromWebSocket pumps messages from the WebSocket to the
+// client.fromWebSocket channel.
 //
 // Inputs: client.wsConn
-// Output: client.messageChannel chan
+// Output: client.fromWebSocket chan
 //
-// Terminate when wsConn.Readmessage returns an error. This happens when:
+// Only this function may send to fromWebSocket, because this function will also
+// close fromWebSocket.
+//
+// Break out of receive loop when wsConn.Readmessage returns an error. This
+// happens when:
 // - We call wsConn.Close() directly
 // - An error reading from the websocket (ex. closed browser)
 func (client *Client) startReadingFromWebSocket() {
-	defer client.Close()
-	defer log.Println("startReadingFromWebSocket returned", client.ID)
+	// Closing the fromWebSocket channel will cause the main loop to exit. The
+	// great thing about this defered call is that we can be confident that even
+	// it this function panics, the fromWebSocket channel will still be closed.
+	// This is important, because the client.Close() function blocks until the
+	// client.fromWebSocket channel is closed.
+	defer close(client.fromWebSocket)
 
+	// Receive messages from the websocket
 	for {
 		_, bytes, err := client.wsConn.ReadMessage()
-		if err != nil {
-			log.Println("Client.startReadingFromWebSocket: ws read error:", err)
+		// Errors from websocket library are expected to be *websocket.CloseError
+		if wsErr, ok := err.(*websocket.CloseError); ok {
+			if wsErr.Code == websocket.CloseGoingAway {
+				log.Println("Client closed tab:", client.id)
+			} else {
+				log.Println("synk.Client.startReadingFromWebSocket Error:", wsErr)
+			}
+			break
+		} else if err != nil {
+			// I don't think this should ever happen, but it can't hurt to double check
+			log.Println("synk.Client.startReadingFromWebSocket Unexpected Read Error:", err)
 			break
 		}
-		// parse our bytes into a message
-		message, parseErr := MessageFromBytes(bytes)
-		if parseErr != nil {
+
+		// We successully received bytes. Try to parse them.
+		if message, parseErr := MessageFromBytes(bytes); parseErr != nil {
 			// Failed to parse message. Report error, but don't break out of the loop.
-			log.Println("Client.startReadingFromWebSocket: error parsing bytes:", parseErr)
+			log.Println("synk.Client.startReadingFromWebSocket: error parsing bytes:", parseErr)
 		} else {
 			client.fromWebSocket <- message
 		}
@@ -263,7 +245,7 @@ func (client *Client) startReadingFromWebSocket() {
 }
 
 func (client *Client) String() string {
-	return fmt.Sprintf("{Client.ID: %s}", client.ID)
+	return fmt.Sprintf("{Client.ID: %s}", client.id)
 }
 
 // not safe for concurrent calls
@@ -284,37 +266,18 @@ func (client *Client) handleMessage(message interface{}) error {
 // subscribe/unsubscribe to the keys in the diff map. This is NOT safe for
 // concurrent calls, and may only be called by a single goroutine
 func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
-	var err error
 
-	add := make([]interface{}, len(msg.Add))
-	remove := make([]interface{}, len(msg.Remove))
-
-	for i, subKey := range msg.Remove {
-		remove[i] = subKey
+	for _, subKey := range msg.Remove {
 		delete(client.subscriptions, subKey)
 	}
-	for i, subKey := range msg.Add {
-		add[i] = subKey
+	for _, subKey := range msg.Add {
 		client.subscriptions[subKey] = true
 	}
 
-	// Send the unsubscribe request
-	if len(remove) > 0 {
-		err = client.rSubscription.Unsubscribe(remove...)
-	}
-	if err != nil {
-		log.Println("Client.updateSubscription: error with Unsubscribe", err)
-		return err
-	}
+	client.Node.redisAgents.Update(client, msg.Add, msg.Remove)
 
 	// Send subscribe request
-	if len(add) > 0 {
-		err = client.rSubscription.Subscribe(add...)
-
-		if err != nil {
-			log.Println("Client.updateSubscription: error with Subscribe", err)
-			return err
-		}
+	if len(msg.Add) > 0 {
 
 		objs, err := client.Loader.Load(msg.Add)
 
@@ -354,12 +317,27 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 // Safe for concurrent calls.
 func (client *Client) Close() {
 	client.closeOnce.Do(func() {
-		//client.rSubscription.Unsubscribe() not needed, we are closing the connection
-		client.rConn.Close()
+		// If the wsConn is still open, sub/unsub requests may be incoming. To
+		// ensure there are no pending sub/unsub reqeusts, first close the wsConn.
+		//
+		// Note that it is safe to call wsConn.Close() twice allthough the
+		// second time it will return an error.
+		//
+		// This should terminate the startReadingFromWebSocket goroutine, and
+		// close the client.fromWebSocket channel. Closing this channel also
+		// causes the main loop to break.
 		client.wsConn.Close()
+
+		// Wait for the the main loop to close.
+		for range client.fromWebSocket {
+		}
+
+		// Once the fromWebSocket channel is closed, we are gauranteed not to
+		// get an pub/sub requests from the client.
+		client.Node.redisAgents.RemoveAgent(client)
+
 		client.waitGroup.Done()
 	})
-	client.quit <- true
 }
 
 // May only be called from the mainLoop. Not safe for concurrent calls.
@@ -373,10 +351,9 @@ func (client *Client) writeToWebSocket(message []byte) error {
 }
 
 // WriteToWebSocket sends data via websocket. Safe for concurrent calls.
-//
-// While this is the same as just sending data to the toWebSocket channel, this
-// method is exported while the channel is not. This way it is harder for client
-// code to accidentally overwrite the channel.
 func (client *Client) WriteToWebSocket(data []byte) {
+	// While this is the same as just sending data to the toWebSocket channel, this
+	// method is exported while the channel is not. This way it is harder for client
+	// code to accidentally overwrite the channel.
 	client.toWebSocket <- data
 }

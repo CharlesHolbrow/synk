@@ -3,6 +3,7 @@ package synk
 import (
 	"time"
 
+	"github.com/CharlesHolbrow/pubsub"
 	"github.com/garyburd/redigo/redis"
 	"gopkg.in/mgo.v2"
 )
@@ -14,6 +15,7 @@ import (
 type Node struct {
 	mongoSession *mgo.Session
 	redisPool    *redis.Pool
+	redisAgents  *pubsub.RedisAgents
 	NewContainer ContainerConstructor
 	NewClient    ClientConstructor
 }
@@ -27,6 +29,7 @@ func NewNode() *Node {
 	return &Node{
 		mongoSession: DialMongo(),
 		redisPool:    DialRedisPool(),
+		redisAgents:  pubsub.NewRedisAgents(DialRedis()),
 	}
 }
 
