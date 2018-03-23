@@ -20,11 +20,13 @@ Meanwhile, on the client side (in the web browser)
 - A sync client makes a websocket connection to the synk server using the `synk-js` npm package.
 - The client 'subscribes' to zero or more subscription keys.
 - The server sends the current state of any objects within the provided subscription keys.
-- The client constructs a JavaScript objects for each synk object. As the application developer, you create this object by extending the provided class.
+- The client constructs a JavaScript objects for each synk object. As the application developer, you must create this object to satisfy the `synk-js` interface. It must have the `constructor`, `update`, and `teardown` methods as specified by the `synk-js` library.
 
 This library is made to handle certain certain cases that other libraries are not:
 
 - Assume that the client is always changing their subscription key set.
 - Assume that synk objects may move. The object's subscription key may be updated. - Ensure that client cache stays up to date, and no objects are 'lost' as a result of the client changing.
+- Messages sent to clients are not passed through the database.
+- When synk Objects are loaded into memory, they 'belong' to a given process. This avoids a race condition, while providing significant performance benefits over when most of the mutations originate on the server. (In a traditional web server, it is expected that most modifications we be as a result of user action).
 
-You (the developer) are responsible for implementing the required go interfaces. And javascript constructors.
+You (the developer) are responsible for implementing the required go interfaces and JavaScript classes.
