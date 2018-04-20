@@ -21,6 +21,19 @@ var RedisAddr = os.Getenv("SYNK_REDIS_ADDR")
 // Check mgo docs to see how ports are specified
 var MongoAddr = os.Getenv("SYNK_MONGO_ADDR")
 
+// MongoDBName is the name of the database to connect to. Defaults to "synk"
+var MongoDBName = os.Getenv("SYNK_MONGO_DB")
+
+// MongoUser and MongoPass may optionally be used to authenticate with mongod.
+// If they are both empty or unset, we will not try to authenticate. Note that
+// mongo auth credentials are tied to a mongo database, and these credentials
+// should match the db specified by "SYNK_MONGO_DB" (default = "synk")
+var mongoUser = os.Getenv("SYNK_MONGO_USER")
+var mongoPass = os.Getenv("SYNK_MONGO_PASS")
+
+// MongoLoginRequired will be set if a user or pass is specified
+var mongoLoginRequired bool
+
 // Initialize some Defaults
 func init() {
 	// redigo accepts just a host number, which causes it to bind to 127.0.0.1
@@ -32,8 +45,23 @@ func init() {
 		MongoAddr = "localhost"
 	}
 
+	if MongoDBName == "" {
+		MongoDBName = "synk"
+	}
+
+	if mongoUser != "" || mongoPass != "" {
+		mongoLoginRequired = true
+	}
+
 	fmt.Println("Redis Address:", RedisAddr)
 	fmt.Println("Mongo Address:", MongoAddr)
+	fmt.Println("Mongo DB Name:", MongoDBName)
+
+	if mongoLoginRequired {
+		fmt.Println("Mongo User:", mongoUser)
+	} else {
+		fmt.Println("Mongo will not attempt to authenticate")
+	}
 }
 
 // There are two ways to modify Objects.

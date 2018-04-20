@@ -29,7 +29,7 @@ func TestHuman_GetSubKey(t *testing.T) {
 	pool := synk.DialRedisPool()
 
 	ms := synk.MongoSynk{
-		Coll:      session.DB("synk").C("objects"),
+		Coll:      session.DB(synk.MongoDBName).C("objects"),
 		Creator:   creator,
 		RedisPool: pool,
 	}

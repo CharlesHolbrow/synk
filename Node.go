@@ -1,6 +1,7 @@
 package synk
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/CharlesHolbrow/pubsub"
@@ -46,7 +47,7 @@ func (node *Node) CreateMutator() Mutator {
 
 	return &MongoSynk{
 		Creator:   node.NewContainer,
-		Coll:      node.mongoSession.Clone().DB("synk").C("objects"),
+		Coll:      node.mongoSession.Clone().DB(MongoDBName).C("objects"),
 		RedisPool: node.redisPool,
 	}
 }
@@ -62,7 +63,7 @@ func (node *Node) CreateLoader() Loader {
 
 	return &MongoSynk{
 		Creator:   node.NewContainer,
-		Coll:      node.mongoSession.Clone().DB("synk").C("objects"),
+		Coll:      node.mongoSession.Clone().DB(MongoDBName).C("objects"),
 		RedisPool: node.redisPool,
 	}
 }
@@ -108,5 +109,19 @@ func DialMongo() *mgo.Session {
 	if err != nil {
 		panic("Error Dialing mongodb: " + err.Error())
 	}
+
+	if mongoLoginRequired {
+		err = session.Login(&mgo.Credential{
+			Username: mongoUser,
+			Password: mongoPass,
+			Source:   MongoDBName,
+		})
+		if err != nil {
+			panic("Error Authorizing mongodb: " + err.Error())
+		} else {
+			fmt.Println("Successfully authenticated:", mongoUser)
+		}
+	}
+
 	return session
 }
