@@ -17,8 +17,8 @@ import (
 // If no host is specified redis's default (127.0.0.1) is used
 var RedisAddr = os.Getenv("SYNK_REDIS_ADDR")
 
-// MongoAddr is the address that the synk library uses by. Defaults to localhost
-// Check mgo docs to see how ports are specified
+// MongoAddr is the mongodb address that the synk library uses. Defaults to
+// localhost Check mgo docs to see how ports are specified
 var MongoAddr = os.Getenv("SYNK_MONGO_ADDR")
 
 // MongoDBName is the name of the database to connect to. Defaults to "synk"
