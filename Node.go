@@ -112,9 +112,10 @@ func DialMongo() *mgo.Session {
 
 	if mongoLoginRequired {
 		err = session.Login(&mgo.Credential{
-			Username: mongoUser,
-			Password: mongoPass,
-			Source:   MongoDBName,
+			Username:  mongoUser,
+			Password:  mongoPass,
+			Source:    MongoDBName,
+			Mechanism: "SCRAM-SHA-1",
 		})
 		if err != nil {
 			panic("Error Authorizing mongodb: " + err.Error())
