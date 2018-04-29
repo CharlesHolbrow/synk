@@ -24,7 +24,6 @@ type Handler struct {
 
 // NewHandler creates a WsHandler for use with http.Handle
 func NewHandler(node *Node) *Handler {
-
 	h := &Handler{
 		Node:       node,
 		clientPool: newClientPool(),

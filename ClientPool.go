@@ -4,17 +4,17 @@ package synk
 // safely from multiple goroutines.
 type ClientPool struct {
 	// send a client here to create
-	add       chan *Client
-	remove    chan *Client
-	all       map[ID]*Client
+	add       chan *synkClient
+	remove    chan *synkClient
+	all       map[ID]*synkClient
 	broadcast chan []byte
 }
 
 func newClientPool() *ClientPool {
 	pool := ClientPool{
-		add:       make(chan *Client),
-		remove:    make(chan *Client),
-		all:       make(map[ID]*Client),
+		add:       make(chan *synkClient),
+		remove:    make(chan *synkClient),
+		all:       make(map[ID]*synkClient),
 		broadcast: make(chan []byte),
 	}
 	return &pool
