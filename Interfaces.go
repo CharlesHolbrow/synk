@@ -149,7 +149,7 @@ type CustomClient interface {
 // handlers for messages received from clients. You will need to implement
 // the CustomClient AND a constructor for that Client type.
 //
-// When a client makes a websocket connection, you constructor will be called,
+// When a client makes a websocket connection, your constructor will be called,
 // and passed a Client object. The constructor function is expected to return
 // an instance of your CustomClient that provides the OnConnect and OnMessage
 // callbacks.
