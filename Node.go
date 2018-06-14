@@ -17,8 +17,8 @@ type Node struct {
 	mongoSession *mgo.Session
 	redisPool    *redis.Pool
 	redisAgents  *pubsub.RedisAgents
-	NewContainer ContainerConstructor
-	NewClient    ClientConstructor
+	newContainer ContainerConstructor
+	newClient    ClientConstructor
 }
 
 // NewNode creates new a *Node with the default connections.
@@ -41,7 +41,7 @@ func NewNode() *Node {
 //
 // BUG(charles): Should Mutators have a dedicated redis Connection?
 func (node *Node) CreateMutator() Mutator {
-	if node.NewContainer == nil {
+	if node.newContainer == nil {
 		panic("Tried to get a mutator, but not NewContainer is not set")
 	}
 
@@ -57,15 +57,47 @@ func (node *Node) CreateMutator() Mutator {
 //
 // Panic if NewContainer is not initialized.
 func (node *Node) CreateLoader() Loader {
-	if node.NewContainer == nil {
+	if node.newContainer == nil {
 		panic("Tried to get a Loader, but not NewContainer is not set")
 	}
 
 	return &MongoSynk{
-		Creator:   node.NewContainer,
+		Creator:   node.newContainer,
 		Coll:      node.mongoSession.Clone().DB(MongoDBName).C("objects"),
 		RedisPool: node.redisPool,
 	}
+}
+
+// RegisterClientConstructor sets function that will be called to create a
+// custom client. Consumer code must register a constructor to provide custom
+// handlers for messages from WebSocket clients.
+func (node *Node) RegisterClientConstructor(constructor ClientConstructor) {
+	if node.newClient != nil {
+		panic("synk.Node cannot register an additional ClientConstructor")
+	}
+	node.newClient = constructor
+}
+
+// RegisterContainerConstructor sets the function that will be called to create
+// containers for synk objects. It is the responsibility of client code to
+// register a constructor that handles objects based on their type key.
+func (node *Node) RegisterContainerConstructor(constructor ContainerConstructor) {
+	if node.newContainer != nil {
+		panic("synk.Node cannot register an additional ContainerConstructor")
+	}
+	node.newContainer = constructor
+}
+
+// NewContainer returns a synk object based on the consuming code's registered
+// ContainerConstructor.
+func (node *Node) NewContainer(typeKey string) Object {
+	return node.newContainer(typeKey)
+}
+
+// NewClient returns a custom client based on the consuming code's registered
+// ClientConstructor.
+func (node *Node) NewClient(c Client) CustomClient {
+	return node.newClient(c)
 }
 
 // Helpers
@@ -112,9 +144,10 @@ func DialMongo() *mgo.Session {
 
 	if mongoLoginRequired {
 		err = session.Login(&mgo.Credential{
-			Username: mongoUser,
-			Password: mongoPass,
-			Source:   MongoDBName,
+			Username:  mongoUser,
+			Password:  mongoPass,
+			Source:    MongoDBName,
+			Mechanism: "SCRAM-SHA-1",
 		})
 		if err != nil {
 			panic("Error Authorizing mongodb: " + err.Error())

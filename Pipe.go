@@ -36,7 +36,7 @@ func NewSynk() *Pipe {
 	// Continuously pump messages from MutateRedisChan
 	arc.MutateRedisChan = make(chan Object)
 	go func() {
-		for _ = range arc.MutateRedisChan {
+		for range arc.MutateRedisChan {
 			panic("Mutate redisChan is not currently supported")
 		}
 	}()

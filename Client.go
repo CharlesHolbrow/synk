@@ -27,10 +27,10 @@ const (
 	clientBufferLength = 64
 )
 
-// Client represents a connected client in a browser. Includes the client's
+// synkClient represents a connected client in a browser. Includes the client's
 // websocket and redis connections.
 // The client does not know which pools it is a part of.
-type Client struct {
+type synkClient struct {
 	Node          *Node
 	Loader        Loader
 	custom        CustomClient
@@ -43,11 +43,11 @@ type Client struct {
 	waitGroup     sync.WaitGroup
 }
 
-func newClient(node *Node, wsConn *websocket.Conn) (*Client, error) {
-	var client *Client
+func newClient(node *Node, wsConn *websocket.Conn) (*synkClient, error) {
+	var client *synkClient
 	log.Println("Creating New Client...")
 
-	client = &Client{
+	client = &synkClient{
 		Node:          node,
 		Loader:        node.CreateLoader(),
 		wsConn:        wsConn,
@@ -76,8 +76,13 @@ func newClient(node *Node, wsConn *websocket.Conn) (*Client, error) {
 }
 
 // ID returns the client's id as a string
-func (client *Client) ID() string {
+func (client *synkClient) ID() string {
 	return client.id.String()
+}
+
+// Publish a message to the synk system
+func (client *synkClient) Publish(key string, msg interface{}) error {
+	return client.Loader.Publish(key, msg)
 }
 
 // Receive handles byteSlices from redis.
@@ -90,7 +95,7 @@ func (client *Client) ID() string {
 // While this function is safe for concurrent calls, we may still want to be
 // careful with where it gets called from, because the order synk messages
 // arrive in is important.
-func (client *Client) Receive(key string, bytes []byte) (err error) {
+func (client *synkClient) Receive(key string, bytes []byte) (err error) {
 	s := string(bytes)
 	split := strings.Index(s, "{")
 	if split == 0 {
@@ -145,7 +150,7 @@ func (client *Client) Receive(key string, bytes []byte) (err error) {
 // - error or timeout sending to websocket
 // - ping timeout on websocket
 // - message received on .quit channel
-func (client *Client) startMainLoop() {
+func (client *synkClient) startMainLoop() {
 	ticker := time.NewTicker(pingInterval)
 
 	defer ticker.Stop()
@@ -209,7 +214,7 @@ func (client *Client) startMainLoop() {
 // happens when:
 // - We call wsConn.Close() directly
 // - An error reading from the websocket (ex. closed browser)
-func (client *Client) startReadingFromWebSocket() {
+func (client *synkClient) startReadingFromWebSocket() {
 	// Closing the fromWebSocket channel will cause the main loop to exit. The
 	// great thing about this defered call is that we can be confident that even
 	// it this function panics, the fromWebSocket channel will still be closed.
@@ -244,12 +249,12 @@ func (client *Client) startReadingFromWebSocket() {
 	}
 }
 
-func (client *Client) String() string {
+func (client *synkClient) String() string {
 	return fmt.Sprintf("{Client.ID: %s}", client.id)
 }
 
 // not safe for concurrent calls
-func (client *Client) handleMessage(message interface{}) error {
+func (client *synkClient) handleMessage(message interface{}) error {
 	switch msg := message.(type) {
 	case UpdateSubscriptionMessage:
 		client.updateSubscription(msg)
@@ -265,7 +270,7 @@ func (client *Client) handleMessage(message interface{}) error {
 
 // subscribe/unsubscribe to the keys in the diff map. This is NOT safe for
 // concurrent calls, and may only be called by a single goroutine
-func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
+func (client *synkClient) updateSubscription(msg UpdateSubscriptionMessage) error {
 
 	for _, subKey := range msg.Remove {
 		delete(client.subscriptions, subKey)
@@ -315,7 +320,7 @@ func (client *Client) updateSubscription(msg UpdateSubscriptionMessage) error {
 
 // Close tears down client resources, and stops client goroutines.
 // Safe for concurrent calls.
-func (client *Client) Close() {
+func (client *synkClient) Close() {
 	client.closeOnce.Do(func() {
 		// If the wsConn is still open, sub/unsub requests may be incoming. To
 		// ensure there are no pending sub/unsub reqeusts, first close the wsConn.
@@ -341,7 +346,7 @@ func (client *Client) Close() {
 }
 
 // May only be called from the mainLoop. Not safe for concurrent calls.
-func (client *Client) writeToWebSocket(message []byte) error {
+func (client *synkClient) writeToWebSocket(message []byte) error {
 	client.wsConn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if err := client.wsConn.WriteMessage(websocket.TextMessage, message); err != nil {
 		log.Println("Client: Error Writing to websocket:", err)
@@ -351,7 +356,7 @@ func (client *Client) writeToWebSocket(message []byte) error {
 }
 
 // WriteToWebSocket sends data via websocket. Safe for concurrent calls.
-func (client *Client) WriteToWebSocket(data []byte) {
+func (client *synkClient) WriteToWebSocket(data []byte) {
 	// While this is the same as just sending data to the toWebSocket channel, this
 	// method is exported while the channel is not. This way it is harder for client
 	// code to accidentally overwrite the channel.

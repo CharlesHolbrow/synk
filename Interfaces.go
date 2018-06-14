@@ -118,6 +118,14 @@ type Initializer interface {
 	OnCreate()
 }
 
+// Client is how synkClient looks to the outside world.
+type Client interface {
+	// Note(charles): if you update this, its probably worth making sure
+	// existing synkClient interface satisfies it.
+	Publish(string, interface{}) error
+	ID() string
+}
+
 // ContainerConstructor creates an Object container for a given type key. This
 // allows client code to pass in custom logic for building containers based on
 // client types
@@ -128,9 +136,9 @@ type ContainerConstructor func(typeKey string) Object
 // a client creates a Connection to the synk server. It also provides an
 // interface for writing custom message handlers.
 type CustomClient interface {
-	OnConnect(client *Client)
-	OnMessage(client *Client, method string, data []byte)
-	OnSubscribe(client *Client, subKeys []string, objs []Object)
+	OnConnect(client Client)
+	OnMessage(client Client, method string, data []byte)
+	OnSubscribe(client Client, subKeys []string, objs []Object)
 }
 
 // A ClientConstructor must be supplied when implementing custom handlers.
@@ -145,7 +153,17 @@ type CustomClient interface {
 // and passed a Client object. The constructor function is expected to return
 // an instance of your CustomClient that provides the OnConnect and OnMessage
 // callbacks.
-type ClientConstructor func(client *Client) CustomClient
+type ClientConstructor func(client Client) CustomClient
+
+// An AccessPoint manages connections to the services that power a synk server.
+// This includes services such as database and messaging.
+type AccessPoint interface {
+	CreateMutator() Mutator
+	CreateLoader() Loader
+	RegisterClientConstructor(ClientConstructor)
+	RegisterContainerConstructor(ContainerConstructor)
+	NewClient(client Client) CustomClient
+}
 
 // Mutator represents a type that can get/modify objects.
 //
