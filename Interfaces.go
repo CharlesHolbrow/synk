@@ -124,6 +124,7 @@ type Client interface {
 	// existing synkClient interface satisfies it.
 	Publish(string, interface{}) error
 	ID() string
+	WriteToWebSocket(data []byte)
 }
 
 // ContainerConstructor creates an Object container for a given type key. This
